@@ -1,6 +1,6 @@
 # Daydream
 
-Lenguaje de programación diseñado para uso general, y pensado para que sea posible representar cómodamente, por ejemplo, problemas comunes 
+Lenguaje de programación diseñado para uso general, y pensado para que sea posible representar cómodamente, por ejemplo, problemas comunes
 en inteligencia artificial. _Daydream_ es un lenguaje imperativo con alcance estático, con un sistema de tipos con verificación estática.
 
 ## Estructura de un programa
@@ -31,6 +31,19 @@ Tipo numérico de enteros con precisión fija. Se representa en secuencias de n�
 Tipo numérico en punto flotanto con precisión simple. Se representa en secuencias de números del 0 al 9, seguidas por un punto y otra
 secuencia de números del 0 al 9 (Ej: `53.623`).
 
+### Apuntador
+
+Tipo apuntador a alguno de los tipos escalares previamente mencionados. Un dato de este tipo contiene la dirección en memoria del objeto
+al cual apunta.
+
+```
+Int a;
+:Int> b;
+b = a;
+```
+
+'b' contiene la dirección en memoria de 'a'.
+
 ## Tipos de datos colección
 
 ### Arreglos
@@ -56,7 +69,7 @@ B el tipo del valor, y se representan como una secuencia clave:valor separados p
 ## Tipos algebraicos de datos
 
 En _Daydream_, se cuentan con tipos de datos algebraicos, potencialmente recursivos. En un tipo algebraico, es posible tener una "suma"
-de tipos (el tipo A puede ser el tipo B o el tipo C, pero no ambos), y un "producto" de tipos (el tipo A es el tipo B y el tipo C, juntos). 
+de tipos (el tipo A puede ser el tipo B o el tipo C, pero no ambos), y un "producto" de tipos (el tipo A es el tipo B y el tipo C, juntos).
 Por ejemplo, un árbol binario de enteros se representaria en _Daydream_ así:
 
 ```
@@ -96,7 +109,7 @@ Tendríamos `x = 6`.
 
 Las funciones en _Daydream_ pueden ser recursivas e incluso co-recursivas, y pueden ser anidadas arbitrariamente. Una función puede ser
 declarada en cualquier parte del código. Se declara una función con la palabra `func` seguida de la especificación de tipo entre paréntesis,
-seguida del nombre de la función, con los nombres de cada parámetro entre paréntesis y separados por coma. Por ejemplo, la función factorial 
+seguida del nombre de la función, con los nombres de cada parámetro entre paréntesis y separados por coma. Por ejemplo, la función factorial
 se puede escribir así:
 
 ```
@@ -116,7 +129,7 @@ pasado por referencia. Por ejemplo, en la función `f(x?,y)`, el parámetro x se
 ## Tipos genéricos
 
 _Daydream_ permite crear funciones y tipos algebraicos de datos con tipos genéricos, que pueden ser usados como cualquier tipo escalar,
-simplemente colocando el tipo entre corchetes angulares después de las palabras `func`o `data`. Por ejemplo, un árbol binario cuyo tipo 
+simplemente colocando el tipo entre corchetes angulares después de las palabras `func`o `data`. Por ejemplo, un árbol binario cuyo tipo
 no esté limitado a enteros puede escribirse así:
 
 ```
@@ -127,3 +140,18 @@ begin
 end
 ```
 
+## Operadores
+
+Los siguientes operadores operan sobre datos de tipo Int y devuelven datos de tipo Int (Int * Int -> Int).
+
+### Suma (+)
+
+Suma entre enteros. (Ej: `15 + 5 = 20`).
+
+### Resta (-)
+
+Resta entre enteros. (Ej: `15 - 5 = 10`).
+
+### Multiplicación (*)
+
+Multiplicación entre enteros. (Ej: `2 * 3 = 6`).
