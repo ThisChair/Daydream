@@ -142,16 +142,30 @@ end
 
 ## Operadores
 
-Los siguientes operadores operan sobre datos de tipo Int y devuelven datos de tipo Int (Int * Int -> Int).
+* Los siguientes operadores operan sobre datos de tipo numérico y devuelven datos de tipo Int.
 
-### Suma (+)
+#### Suma (+)
 
 Suma entre enteros. (Ej: `15 + 5 = 20`).
 
-### Resta (-)
+#### Resta (-)
 
 Resta entre enteros. (Ej: `15 - 5 = 10`).
 
-### Multiplicación (*)
+#### Multiplicación ()
 
 Multiplicación entre enteros. (Ej: `2 * 3 = 6`).
+
+#### División (/)
+
+División entre enteros (con truncamiento). (Ej: `5 / 2 = 2`).
+
+#### Módulo (%)
+
+Módulo entre enteros. (Ej: `8 % 2 = 0`).
+
+* Los siguientes operadores operan sobre datos de tipo Int y devuelven datos de tipo Bool.
+
+#### Menor Que (>)
+
+Comparación entre tipos numéricos
