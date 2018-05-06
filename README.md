@@ -164,6 +164,24 @@ División entre enteros (con truncamiento). (Ej: `5 / 2 = 2`).
 
 Módulo entre enteros. (Ej: `8 % 2 = 0`).
 
+#### Conjunción bit a bit (&)
+
+Realiza una conjunción bit a bit entre las representaciones en bits de los operandos. (Ej: `10 & 6 = 2`).
+
+#### Disyunción bit a bit (|)
+
+Realiza una disyunción bit a bit entre las representaciones en bits de los operandos. (Ej: `10 | 6 = 14`).
+
+#### Shift lógico a la izquierda (>>)
+
+Realiza un shift lógico hacia la derecha de los bits del primer operando el número de
+posiciones denotadas por el valor del segundo operando. (Ej: `10 >> 1 = 5`).
+
+#### Shift lógico a la izquierda (<<)
+
+Realiza un shift lógico hacia la izquierda de los bits del primer operando el número de
+posiciones denotadas por el valor del segundo operando. (Ej: `10 << 1 = 20`).
+
 * Operadores sobre datos de tipo numérico con valores de retorno de tipo booleano (Bool).
 
 #### Mayor Que (>)
