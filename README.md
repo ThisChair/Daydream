@@ -164,13 +164,21 @@ División entre enteros (con truncamiento). (Ej: `5 / 2 = 2`).
 
 Módulo entre enteros. (Ej: `8 % 2 = 0`).
 
-#### Conjunción bit a bit (&)
+#### Conjunción (bitwise) (&)
 
 Realiza una conjunción bit a bit entre las representaciones en bits de los operandos. (Ej: `10 & 6 = 2`).
 
-#### Disyunción bit a bit (|)
+#### Disyunción (bitwise) (|)
 
 Realiza una disyunción bit a bit entre las representaciones en bits de los operandos. (Ej: `10 | 6 = 14`).
+
+#### Negación (bitwise) (~)
+
+Retorna la negación bit a bit de la representación del operandor. (Ej: `~4 = 3`).
+
+### XOR (bitwise) (^)
+
+Realiza una disyunción exclusiva bit a bit entre las representaciones en bits de los operandos. (Ej: `5 ^ 3 = 6`).
 
 #### Shift lógico a la izquierda (>>)
 
