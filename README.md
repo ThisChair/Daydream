@@ -302,6 +302,7 @@ while x < 1000
 begin
     x = x * 2;
 end
+```
 
 ### Iteradores determinados
 
