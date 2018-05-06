@@ -176,7 +176,7 @@ Realiza una disyunción bit a bit entre las representaciones en bits de los oper
 
 Retorna la negación bit a bit de la representación del operandor. (Ej: `~4 = 3`).
 
-### XOR (bitwise) (^)
+#### XOR (bitwise) (^)
 
 Realiza una disyunción exclusiva bit a bit entre las representaciones en bits de los operandos. (Ej: `5 ^ 3 = 6`).
 
