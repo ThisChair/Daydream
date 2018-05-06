@@ -5,11 +5,42 @@ en inteligencia artificial. _Daydream_ es un lenguaje imperativo con alcance est
 
 ## Estructura de un programa
 
-Los caracteres en blanco son ignorados, y simplemente representan la separación entre cada lexema. En momento, se puede abrir un bloque
-usando las palabras `begin` y `end`, y los bloques podrán ser anidados de manera arbitraria. Las instrucciones del lenguaje deben ser
-separadas mediante un punto y coma (;).
+Los caracteres en blanco son ignorados, y simplemente representan la separación entre las palabras reservadas. En momento, se puede abrir 
+un bloque usando las palabras `begin` y `end`, y los bloques podrán ser anidados de manera arbitraria. 
+Las instrucciones del lenguaje deben ser separadas mediante `;`.
 
-Una variable puede ser declarada en cualquier parte del programa, mientras no se use antes de su declaración.
+Cualquier caracter desde que se coloque `#` hasta el final de la línea será considerado un comentario. Para comentarios de varias líneas,
+se puede usar `#begin` y `#end`.
+
+## Variables
+
+En _Daydream_, las variables deben empezar con una letra minúscula, y luego pueden contener cualquier combinación de letras mayúsculas
+y minúsculas, guiones (`-`), guiones bajos (`_`) y números que no coincidan con alguna palabra reservada del lenguaje. Adicionalmente, 
+podrán colocarse cualquier cantidad de comillas simples (`'`) al final del nombre de la variable. Por ejemplo, `hola`, `wHILE`, `x'` y
+`var_1` son nombres válidos para variables. En cambio, `Hola`, `while`, `x'y`, `1_var` no son nombres válidos.
+
+Una variable puede ser declarada en cualquier parte del programa, mientras no se use antes de su declaración. Para declarar una variable,
+se debe colocar el tipo y luego el nombre de cada variable que se desea declarar, separadas por comas (`,`). En la declaración de una
+variable, se le puede asignar un valor. Así, estas instrucciones son válidas:
+
+```
+Int x = 5;
+
+Int y;
+
+y = 5;
+
+Bool a,b,c;
+```
+
+En cambio, no son válidas:
+
+```
+x = 5;
+Int x;
+
+Int y,z = 4;
+```
 
 ## Tipos escalares de datos
 
@@ -30,19 +61,6 @@ Tipo numérico de enteros con precisión fija. Se representa en secuencias de n�
 
 Tipo numérico en punto flotanto con precisión simple. Se representa en secuencias de números del 0 al 9, seguidas por un punto y otra
 secuencia de números del 0 al 9 (Ej: `53.623`).
-
-### Apuntador
-
-Tipo apuntador. Un dato de este tipo contiene la dirección en memoria del objeto
-al cual apunta.
-
-```
-Int a;
-:Int> b;
-b = a;
-```
-
-'b' contiene la dirección en memoria de 'a'.
 
 ## Tipos de datos colección
 
@@ -105,6 +123,16 @@ Int x = arbol.right.right;
 
 Tendríamos `x = 6`.
 
+## Apuntador
+
+Tipo apuntador. Un dato de este tipo contiene la dirección en memoria del objeto
+al cual apunta.
+
+```
+:Int> b;
+```
+
+
 ## Funciones
 
 Las funciones en _Daydream_ pueden ser recursivas e incluso co-recursivas, y pueden ser anidadas arbitrariamente. Una función puede ser
@@ -158,11 +186,19 @@ Multiplicación entre enteros. (Ej: `2 * 3 = 6`).
 
 #### División (/)
 
-División entre enteros (con truncamiento). (Ej: `5 / 2 = 2`).
+División entre números. (Ej: `5.0 / 2.0 = 2.5`).
+
+### División entera (//)
+
+División entre números, truncando (Ej: `5 / 2 = 2`).
 
 #### Módulo (%)
 
 Módulo entre enteros. (Ej: `8 % 2 = 0`).
+
+#### Potencia (**)
+
+Potencia 
 
 #### Conjunción (bitwise) (&)
 
@@ -231,3 +267,74 @@ Disyunción lógica (∨). (Ej: `True || False = True`).
 #### Negación (!)
 
 Negación lógica (¬). (Ej: `!True = False`).
+
+## Selectores
+
+Existe la estructura `if then else`, que funciona de la manera esperada.
+Por ejemplo, la función _mínimo_:
+
+```
+func (Int, Int -> Int) min(x,y)
+begin
+    if x < y then
+    begin
+        return x;
+    end else
+    begin
+        return y;
+    end
+end
+```
+
+## Iteradores
+
+En _Daydream_ existen iteradores determinados e indeterminados. Además, ambos pueden ser terminados en cualquier momento usando
+la instrucción `break`, y pueden saltarse el resto de las instrucciones de una iteración usando la instrucción `continue`.
+
+### Iteradores indeterminados
+
+Existe el ciclo `while`. Por ejemplo, si quisiéramos hacer potencias de 2 hasta que el número sea mayor a 1000:
+
+```
+Int x = 1;
+
+while x < 1000
+begin
+    x = x * 2;
+end
+
+### Iteradores determinados
+
+Existe el ciclo `for`, que tiene varias formas posibles. La más sencilla de ellas es simplemente de la forma
+`for variable from inicio to fin`. Se inicializa `variable` en `inicio`, y se le suma 1 hasta que sea igual a `fin`.
+Por ejemplo, para sumar los números del 1 al 100:
+
+```
+Int x = 0;
+
+for i from 1 to 100
+begin
+    x = x + i;
+end
+
+Int y = 0;
+
+for i from 100 to 1
+begin
+    y = y + i;
+end
+
+print(y == x) # true
+```
+También pueden imponerse condiciones para considerar al entrar a una iteración, con la forma `for variable from inicio to fin if condición`.
+Funciona exactamente igual al anterior, pero verifica `condición` al inicio de cada iteración. Por ejemplo, si queremos sumar todos
+los números pares del 1 al 100:
+
+```
+Int x = 0;
+
+for i from 1 to 100 if i % 2 == 0
+begin
+    x = x + i;
+end
+```
