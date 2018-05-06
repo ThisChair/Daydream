@@ -33,7 +33,7 @@ secuencia de números del 0 al 9 (Ej: `53.623`).
 
 ### Apuntador
 
-Tipo apuntador a alguno de los tipos escalares previamente mencionados. Un dato de este tipo contiene la dirección en memoria del objeto
+Tipo apuntador. Un dato de este tipo contiene la dirección en memoria del objeto
 al cual apunta.
 
 ```
@@ -142,7 +142,7 @@ end
 
 ## Operadores
 
-* Los siguientes operadores operan sobre datos de tipo numérico y devuelven datos de tipo Int.
+* Operadores sobre datos de tipo numérico con valores de retorno de tipo numérico.
 
 #### Suma (+)
 
@@ -164,8 +164,44 @@ División entre enteros (con truncamiento). (Ej: `5 / 2 = 2`).
 
 Módulo entre enteros. (Ej: `8 % 2 = 0`).
 
-* Los siguientes operadores operan sobre datos de tipo Int y devuelven datos de tipo Bool.
+* Operadores sobre datos de tipo numérico con valores de retorno de tipo booleano (Bool).
 
-#### Menor Que (>)
+#### Mayor Que (>)
 
-Comparación entre tipos numéricos
+Comparación entre tipos numéricos. Para `a > b` retorna `True` si `a` es mayor que `b`, `False` en caso contrario.
+
+#### Menor Que (<)
+
+Comparación entre tipos numéricos. Para `a < b` retorna `True` si `a` es menor que `b`, `False` en caso contrario.
+
+#### Mayor / Igual Que (>=)
+
+Comparación entre tipos numéricos. Para `a >= b` retorna `True` si `a` es mayor o igual que `b`, `False` en caso contrario.
+
+#### Menor / Igual Que (<=)
+
+Comparación entre tipos numéricos. Para `a <= b` retorna `True` si `a` es menor o igual que `b`, `False` en caso contrario.
+
+* Operadores sobre datos de tipos iguales con valores de retorno de tipo booleano (Bool).
+
+#### Igual (==)
+
+Comparación de igualdad entre datos del mismo tipo.
+
+#### Desigual (/=)
+
+Comparación de desigualdad entre datos del mismo tipo.
+
+* Operadores sobre datos de tipo booleano (Bool) con valores de retorno de tipo booleano (Bool).
+
+#### Conjunción (&&)
+
+Conjunción lógica (∧). (Ej: `True && False = False`).
+
+#### Disyunción (||)
+
+Disyunción lógica (∨). (Ej: `True || False = True`).
+
+#### Negación (!)
+
+Negación lógica (¬). (Ej: `!True = False`).
