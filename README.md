@@ -6,11 +6,11 @@ en inteligencia artificial. _Daydream_ es un lenguaje imperativo con alcance est
 ## Estructura de un programa
 
 Los caracteres en blanco son ignorados, y simplemente representan la separación entre las palabras reservadas. En momento, se puede abrir 
-un bloque usando las palabras `begin` y `end`, y los bloques podrán ser anidados de manera arbitraria. 
+un bloque usando las palabras `dream` y `wake`, y los bloques podrán ser anidados de manera arbitraria. 
 Las instrucciones del lenguaje deben ser separadas mediante `;`.
 
 Cualquier caracter desde que se coloque `#` hasta el final de la línea será considerado un comentario. Para comentarios de varias líneas,
-se puede usar `#begin` y `#end`.
+se puede usar `#dream` y `#wake`.
 
 ## Variables
 
@@ -92,10 +92,10 @@ Por ejemplo, un árbol binario de enteros se representaria en _Daydream_ así:
 
 ```
 data Tree
-begin
+dream
     node(Int, data, Tree left, Tree right);
     leaf(Int data);
-end
+wake
 ```
 
 Luego, se puede declarar un árbol de la siguiente manera:
@@ -114,14 +114,14 @@ Donde `arbol` estaría representando el siguiente árbol:
   1   6
 ```
 
-Y podemos acceder a los elementos de cada tipo usando el operador `.` seguido del elemento al que queremos acceder. Siguiendo el ejemplo
-anterior, haciendo la asignación:
+Y podemos acceder a los elementos de cada tipo usando el operador `.` seguido del elemento al que queremos acceder. Siguiwakeo el ejemplo
+anterior, haciwakeo la asignación:
 
 ```
 Int x = arbol.right.right;
 ```
 
-Tendríamos `x = 6`.
+Twakeríamos `x = 6`.
 
 ## Apuntador
 
@@ -142,10 +142,10 @@ se puede escribir así:
 
 ```
 func (Int -> Int) fact(n)
-begin
+dream
     if n <= 1 return 1;
     return n * fact(n-1);
-end
+wake
 ```
 La especificación de tipo se escribe como (x<sub>1</sub>, x<sub>2</sub>...x<sub>n</sub> -> r), donde x<sub>i</sub> es el tipo de cada parámetro,
 la función recibe n parámetros, y r es el tipo del parámetro de retorno. Si no se coloca `-> r`, entonces la función no retorna nada.
@@ -162,10 +162,10 @@ no esté limitado a enteros puede escribirse así:
 
 ```
 data <T>  Tree
-begin
+dream
     node(T, data, Tree left, Tree right);
     leaf(T data);
-end
+wake
 ```
 
 ## Operadores
@@ -275,15 +275,15 @@ Por ejemplo, la función _mínimo_:
 
 ```
 func (Int, Int -> Int) min(x,y)
-begin
+dream
     if x < y then
-    begin
+    dream
         return x;
-    end else
-    begin
+    wake else
+    dream
         return y;
-    end
-end
+    wake
+wake
 ```
 
 ## Iteradores
@@ -299,31 +299,31 @@ Existe el ciclo `while`. Por ejemplo, si quisiéramos hacer potencias de 2 hasta
 Int x = 1;
 
 while x < 1000
-begin
+dream
     x = x * 2;
-end
+wake
 ```
 
 ### Iteradores determinados
 
 Existe el ciclo `for`, que tiene varias formas posibles. La más sencilla de ellas es simplemente de la forma
-`for variable from inicio to fin`. Se inicializa `variable` en `inicio`, y se le suma 1 hasta que sea igual a `fin`.
+`for tipo variable from inicio to fin`. Se inicializa `variable` en `inicio`, y se le suma 1 hasta que sea igual a `fin`.
 Por ejemplo, para sumar los números del 1 al 100:
 
 ```
 Int x = 0;
 
 for i from 1 to 100
-begin
+dream
     x = x + i;
-end
+wake
 
 Int y = 0;
 
 for i from 100 to 1
-begin
+dream
     y = y + i;
-end
+wake
 
 print(y == x) # true
 ```
@@ -335,7 +335,7 @@ los números pares del 1 al 100:
 Int x = 0;
 
 for i from 1 to 100 if i % 2 == 0
-begin
+dream
     x = x + i;
-end
+wake
 ```
