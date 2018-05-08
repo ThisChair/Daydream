@@ -30,6 +30,8 @@ Int y;
 
 y = 5;
 
+Float u,v = 5.1, 4.2
+
 Bool a,b,c;
 ```
 
@@ -66,18 +68,29 @@ secuencia de números del 0 al 9 (Ej: `53.623`).
 
 ### Arreglos
 
-Tipo de dato arreglo, que puede contener un mismo tipo T, son declarados como {T}, y se representan como una secuencia de elementos
-separados por comas, encerrados entre llaves (Ej: `{Int} a = {3,2,1,2}`).
+Tipo de dato arreglo, que puede contener un mismo tipo T, son declarados como `{T:n}`, donde `n` es un entero que representa el tamaño
+del arreglo. Se representan como una secuencia de elementos separados por comas, encerrados entre llaves (Ej: `{Int:4} a = {3,2,1,2}`).
 
 ### Listas
 
-Tipo de dato lista, que puede contener un mismo tipo T, son declarados como \[T\], y se representan como una secuencia de elementos
-separadosp or comas, encerrados entre corchetes (Ej:`[Int] a = [4,2,3]`).
+Tipo de dato lista, que puede contener un mismo tipo T, son declarados como `[T]`, y se representan como una secuencia de elementos
+separados por comas, encerrados entre corchetes (Ej:`[Int] a = [4,2,3]`).
 
 ### String
 
 Tipo de dato de cadena de caracteres, representados por una secuencia de caracteres entre comillas dobles. Son equivalentes a tener una
 lista de caracteres, es decir, `['h','o','l','a']` es equivalente a `"hola"`.
+
+### Tuplas
+
+Tipo de dato tupla. Son inmutables, y se pueden declarar de dos maneras. Para tuplas homogéneas `(T:n)`, dónde `T` es el tipo de todos los 
+elementos y `n` es el tamaño de la tupla. Si la tupla no es homogénea, debe declararse como (T<sub>1</sub>, T<sub>2</sub>, ..., T<sub>n</sub>),
+donde `n` es el tamaño de la tupla y T<sub>1</sub>, T<sub>2</sub>, ..., T<sub>n</sub> son los tipos de cada elemento. Por ejemplo:
+
+```
+(Int:3) vector = (4,5,6)
+(String,Int) = ("Tamaño",3)
+```
 
 ### Diccionarios
 
@@ -93,8 +106,8 @@ Por ejemplo, un árbol binario de enteros se representaria en _Daydream_ así:
 ```
 data Tree
 dream
-    node(Int, data, Tree left, Tree right);
-    leaf(Int data);
+    node(Int info, Tree left, Tree right);
+    leaf(Int info);
 wake
 ```
 
@@ -114,14 +127,30 @@ Donde `arbol` estaría representando el siguiente árbol:
   1   6
 ```
 
-Y podemos acceder a los elementos de cada tipo usando el operador `.` seguido del elemento al que queremos acceder. Siguiwakeo el ejemplo
-anterior, haciwakeo la asignación:
+Y podemos acceder a los elementos de cada tipo usando el operador `.` seguido del elemento al que queremos acceder. Para verificar el tipo
+específico, usamos la estructura `case`. Por ejemplo, podríamos escribir una función para devolver la rama más a la derecha:
 
 ```
-Int x = arbol.right.right;
+func (Tree -> Int) rightmostLeaf(t)
+dream
+case t of
+    node dream
+        return rightmostLeaf(t.right);
+    wake
+    leaf dream
+        return t.info
+    wake;
+wake
 ```
 
-Twakeríamos `x = 6`.
+Entonces haciendo la asignación:
+
+```
+Int x = rightmostLead(arbol);
+```
+
+Tendríamos `x == 6`.
+
 
 ## Apuntador
 
@@ -131,7 +160,7 @@ al cual apunta.
 ```
 :Int> b;
 ```
-
+Se puede alojar memoria con `reserve()` y liberar con `free()`
 
 ## Funciones
 
@@ -270,6 +299,8 @@ Negación lógica (¬). (Ej: `!True = False`).
 
 ## Selectores
 
+### if-then-else
+
 Existe la estructura `if then else`, que funciona de la manera esperada.
 Por ejemplo, la función _mínimo_:
 
@@ -285,6 +316,12 @@ dream
     wake
 wake
 ```
+
+### case
+
+Estructura del tipo case var of cond<sub>1</sub> inst<sub>1</sub> ... cond<sub>n</sub> inst<sub>n</sub>;
+
+En la sección de tipos de datos algebraicos hay un buen ejemplo del uso de case, donde además se muestra el _pattern matching_.
 
 ## Iteradores
 
@@ -306,36 +343,27 @@ wake
 
 ### Iteradores determinados
 
-Existe el ciclo `for`, que tiene varias formas posibles. La más sencilla de ellas es simplemente de la forma
-`for tipo variable from inicio to fin`. Se inicializa `variable` en `inicio`, y se le suma 1 hasta que sea igual a `fin`.
-Por ejemplo, para sumar los números del 1 al 100:
+Las iteraciones determinadas se controlan con la palabra reservada `for` y, de manera general, siguen más o menos la estructura
+`for Tipo var from inicio to fin with expresión if condición`. Por ejemplo, si quisiéramos sumar los números pares desde el 1 hasta el 1000
+que además fueran múltiplos de 9 o 5, podríamos usar el siguiente código:
 
 ```
 Int x = 0;
 
-for i from 1 to 100
+for Int i from 1 to 1000 with i * 2 if i % 9 == 0 || i % 5 == 0
 dream
-    x = x + i;
+    x = x + i
 wake
-
-Int y = 0;
-
-for i from 100 to 1
-dream
-    y = y + i;
-wake
-
-print(y == x) # true
 ```
-También pueden imponerse condiciones para considerar al entrar a una iteración, con la forma `for variable from inicio to fin if condición`.
-Funciona exactamente igual al anterior, pero verifica `condición` al inicio de cada iteración. Por ejemplo, si queremos sumar todos
-los números pares del 1 al 100:
+
+Adicionalmente, puede iterarse sobre cualquier colección, usando `for Tipo var in colección if condición`. Por ejemplo, para imprimir
+todos los elementos pares de una lista:
 
 ```
-Int x = 0;
+[Int] l = [2,3,4,5]
 
-for i from 1 to 100 if i % 2 == 0
+for Int n in l if n % 2 == 2
 dream
-    x = x + i;
+    print(n)
 wake
 ```
