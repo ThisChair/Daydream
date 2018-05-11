@@ -8,18 +8,20 @@ import Prelude as P
 
 %wrapper "posn"
 
-$print  = $printable # [\\\"]
-$nothing = ~[]
+$digit = 0-9			-- digits
+$print = $printable # [\\\"]
 
 tokens :-
-    $white+                 ;
-    \#.*\n                  ;
-    \#begin(.*\n*)*\#end    ;
-    begin                   { (\p s -> TBegin p) }
+    $white+                 ; -- Ignore whitespaces
+    \#.*\n                  ; -- Ignore one line comments
+    \#dream(.*\n*)*\#wake   ; -- Ignore multi line comments
+    -- Reserved words
+    dream                   { (\p s -> TDream p) }
     read                    { (\p s -> TRead p) }
     println                 { (\p s -> TPrintLn p) }
     print                   { (\p s -> TPrint p) }
-    end                     { (\p s -> TEnd p) }
+    wake                    { (\p s -> TWake p) }
+    import                  { (\p s -> TImport p) }
     if                      { (\p s -> TIf p) }
     then                    { (\p s -> TThen p) }
     else                    { (\p s -> TElse p) }
@@ -27,10 +29,16 @@ tokens :-
     for                     { (\p s -> TFor p) }
     from                    { (\p s -> TFrom p) }
     to                      { (\p s -> TTo p) }
+    with                    { (\p s -> TWith p) }
+    in                      { (\p s -> TIn p) }
     break                   { (\p s -> TBreak p) }
     continue                { (\p s -> TContinue p) }
     func                    { (\p s -> TFunc p) }
     return                  { (\p s -> TReturn p) }
+    data                    { (\p s -> TData p) }
+    case                    { (\p s -> TCase p) }
+    of                      { (\p s -> TOf p) }
+    -- Symbols
     \/\=                    { (\p s -> TNotEq p) }
     \&\&                    { (\p s -> TAnd p) }
     \|\|                    { (\p s -> TOr p) }
@@ -66,152 +74,160 @@ tokens :-
     \.                      { (\p s -> TPoint p) }
     \?                      { (\p s -> TRef p) }
     \-\>                    { (\p s -> TArrow p) }
+    -- Literals
     true                    { (\p s -> TTrue p) }
     false                   { (\p s -> TFalse p) }
     [a-z][a-zA-Z0-9_]*\'*   { (\p s -> TIdent p s) }
     [A-Z][a-z]*             { (\p s -> TType p s) }
-    [0-9]                   { (\p s -> TNum p (read s)) }
+    digit+(\.$digit+)?       { (\p s -> TNum p s) }
     \"($print | (\\\\) | (\\n) | (\\\"))*\"       
                             { (\p s -> TString p s) }
     \'($print | (\\\\) | (\\n) | (\\\"))\'       
                             { (\p s -> TChar p s) }
-    $nothing                {TUndef}
+    .                       {TUndef}
 
 
 {
 
--- The token type:
 data Token =
-    TBegin      AlexPosn            |
-    TRead       AlexPosn            |
-    TPrintLn    AlexPosn            |
-    TPrint      AlexPosn            |
-    TEnd        AlexPosn            |
-    TIf         AlexPosn            |
-    TThen       AlexPosn            |
-    TElse       AlexPosn            |
-    TWhile      AlexPosn            |
-    TFor        AlexPosn            |
-    TFrom       AlexPosn            |
-    TTo         AlexPosn            |
-    TBreak      AlexPosn            |
-    TContinue   AlexPosn            |
-    TFunc       AlexPosn            |
-    TReturn     AlexPosn            |
-    TNotEq      AlexPosn            |
-    TAnd        AlexPosn            |
-    TOr         AlexPosn            |
-    TNot        AlexPosn            |
-    TBitAnd     AlexPosn            |
-    TBitOr      AlexPosn            |
-    TBitXor     AlexPosn            |
-    TLShift     AlexPosn            |
-    TRShift     AlexPosn            |
-    TBitNot     AlexPosn            |
-    TEq         AlexPosn            |
-    TGEq        AlexPosn            |
-    TLEq        AlexPosn            |
-    TAssign     AlexPosn            |
-    TPlus       AlexPosn            |
-    TMinus      AlexPosn            |
-    TStar       AlexPosn            |
-    TDStar      AlexPosn            |
-    TSlash      AlexPosn            |
-    TDSlash     AlexPosn            |
-    TOpenP      AlexPosn            |
-    TCloseP     AlexPosn            |
-    TOpenB      AlexPosn            |
-    TCloseB     AlexPosn            |
-    TOpenC      AlexPosn            |
-    TCloseC     AlexPosn            |
-    TLess       AlexPosn            |
-    TGreat      AlexPosn            |
-    TPercent    AlexPosn            |
-    TComma      AlexPosn            |
-    TSColon     AlexPosn            |
-    TColon      AlexPosn            |
-    TPoint      AlexPosn            |
-    TRef        AlexPosn            |
-    TArrow      AlexPosn            |
-    TTrue       AlexPosn            |
-    TFalse      AlexPosn            |
-    TIdent      AlexPosn String     |
-    TType       AlexPosn String     |
-    TNum        AlexPosn Int        |
-    TString     AlexPosn String     |
-    TChar       AlexPosn String     |
-    TUndef      AlexPosn String
-    deriving (Eq,Show)
+    TDream      { tokenPos :: AlexPosn }                     |
+    TRead       { tokenPos :: AlexPosn }                     |
+    TPrintLn    { tokenPos :: AlexPosn }                     |
+    TPrint      { tokenPos :: AlexPosn }                     |
+    TWake       { tokenPos :: AlexPosn }                     |
+    TImport     { tokenPos :: AlexPosn }                     |
+    TIf         { tokenPos :: AlexPosn }                     |
+    TThen       { tokenPos :: AlexPosn }                     |
+    TElse       { tokenPos :: AlexPosn }                     |
+    TWhile      { tokenPos :: AlexPosn }                     |
+    TFor        { tokenPos :: AlexPosn }                     |
+    TFrom       { tokenPos :: AlexPosn }                     |
+    TTo         { tokenPos :: AlexPosn }                     |
+    TWith       { tokenPos :: AlexPosn }                     |
+    TIn         { tokenPos :: AlexPosn }                     |
+    TBreak      { tokenPos :: AlexPosn }                     |
+    TContinue   { tokenPos :: AlexPosn }                     |
+    TFunc       { tokenPos :: AlexPosn }                     |
+    TReturn     { tokenPos :: AlexPosn }                     |
+    TData       { tokenPos :: AlexPosn }                     |
+    TCase       { tokenPos :: AlexPosn }                     |
+    TOf         { tokenPos :: AlexPosn }                     |
+    TNotEq      { tokenPos :: AlexPosn }                     |
+    TAnd        { tokenPos :: AlexPosn }                     |
+    TOr         { tokenPos :: AlexPosn }                     |
+    TNot        { tokenPos :: AlexPosn }                     |
+    TBitAnd     { tokenPos :: AlexPosn }                     |
+    TBitOr      { tokenPos :: AlexPosn }                     |
+    TBitXor     { tokenPos :: AlexPosn }                     |
+    TLShift     { tokenPos :: AlexPosn }                     |
+    TRShift     { tokenPos :: AlexPosn }                     |
+    TBitNot     { tokenPos :: AlexPosn }                     |
+    TEq         { tokenPos :: AlexPosn }                     |
+    TGEq        { tokenPos :: AlexPosn }                     |
+    TLEq        { tokenPos :: AlexPosn }                     |
+    TAssign     { tokenPos :: AlexPosn }                     |
+    TPlus       { tokenPos :: AlexPosn }                     |
+    TMinus      { tokenPos :: AlexPosn }                     |
+    TStar       { tokenPos :: AlexPosn }                     |
+    TDStar      { tokenPos :: AlexPosn }                     |
+    TSlash      { tokenPos :: AlexPosn }                     |
+    TDSlash     { tokenPos :: AlexPosn }                     |
+    TOpenP      { tokenPos :: AlexPosn }                     |
+    TCloseP     { tokenPos :: AlexPosn }                     |
+    TOpenB      { tokenPos :: AlexPosn }                     |
+    TCloseB     { tokenPos :: AlexPosn }                     |
+    TOpenC      { tokenPos :: AlexPosn }                     |
+    TCloseC     { tokenPos :: AlexPosn }                     |
+    TLess       { tokenPos :: AlexPosn }                     |
+    TGreat      { tokenPos :: AlexPosn }                     |
+    TPercent    { tokenPos :: AlexPosn }                     |
+    TComma      { tokenPos :: AlexPosn }                     |
+    TSColon     { tokenPos :: AlexPosn }                     |
+    TColon      { tokenPos :: AlexPosn }                     |
+    TPoint      { tokenPos :: AlexPosn }                     |
+    TRef        { tokenPos :: AlexPosn }                     |
+    TArrow      { tokenPos :: AlexPosn }                     |
+    TTrue       { tokenPos :: AlexPosn }                     |
+    TFalse      { tokenPos :: AlexPosn }                     |
+    TIdent      { tokenPos :: AlexPosn, tokenVal :: String } |
+    TType       { tokenPos :: AlexPosn, tokenVal :: String } |
+    TNum        { tokenPos :: AlexPosn, tokenVal :: String } |
+    TString     { tokenPos :: AlexPosn, tokenVal :: String } |
+    TChar       { tokenPos :: AlexPosn, tokenVal :: String } |
+    TUndef      { tokenPos :: AlexPosn, tokenVal :: String }
+    deriving (Eq)
 
-show_pos :: Token -> String
-show_pos (TBegin  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TRead  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TPrintLn  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TPrint  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TEnd  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TIf  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TThen  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TElse  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TWhile  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TFor  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TFrom  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TTo  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TBreak (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TContinue (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TFunc  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TReturn  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TNotEq  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TAnd (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TOr (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TNot (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TBitAnd (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TBitOr  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TBitXor (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TLShift (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TRShift (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TBitNot (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TEq  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TGEq  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TLEq  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TAssign  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TPlus   (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TMinus  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TStar  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TDStar (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TSlash  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TDSlash (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TOpenP  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TCloseP  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TCloseB (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TOpenB (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TCloseC (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TOpenC (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TLess  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TGreat  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TPercent  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TComma  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TSColon  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TColon (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TPoint (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TRef (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TArrow  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TTrue  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TFalse  (AlexPn _ i j)) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TIdent  (AlexPn _ i j) s) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TType  (AlexPn _ i j) s) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TNum  (AlexPn _ i j) s) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TString  (AlexPn _ i j) s) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TChar  (AlexPn _ i j) s) = "linea " ++ show i ++ ", columna " ++ show j
-show_pos (TUndef (AlexPn _ i j) s) = "linea " ++ show i ++ ", columna " ++ show j
+instance Show Token where
+    show (TDream    (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'dream\'"
+    show (TRead     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'read\'"
+    show (TPrintLn  (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'printLn\'"
+    show (TPrint    (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'print\'"
+    show (TWake     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'wake\'"
+    show (TImport   (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'import\'"
+    show (TIf       (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'if\'"
+    show (TThen     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'then\'"
+    show (TElse     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'else\'"
+    show (TWhile    (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'while\'"
+    show (TFor      (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'for\'"
+    show (TFrom     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'from\'"
+    show (TWith     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'with\'"
+    show (TIn       (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'in\'"
+    show (TBreak    (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'break\'"
+    show (TContinue (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'continue\'"
+    show (TFunc     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'func\'"
+    show (TReturn   (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'return\'"
+    show (TData     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'data\'"
+    show (TCase     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'case\'"
+    show (TOf       (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'of\'"
+    show (TNotEq    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'/=\'"
+    show (TAnd      (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'&&\'"
+    show (TOr       (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'||\'"
+    show (TNot      (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'!\'"
+    show (TBitAnd   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'&\'"
+    show (TBitOr    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'|\'"
+    show (TBitXor   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'^\'"
+    show (TLShift   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'<<\'"
+    show (TRShift   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'>>\'"
+    show (TBitNot   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'~\'"
+    show (TEq       (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'==\'"
+    show (TGEq      (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'>=\'"
+    show (TLEq      (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'<=\'"
+    show (TAssign   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'=\'"
+    show (TPlus     (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'+\'"
+    show (TMinus    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'-\'"
+    show (TStar     (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'*\'"
+    show (TDStar    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'**\'"
+    show (TSlash    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'/\'"
+    show (TDSlash   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'//\'"
+    show (TOpenP    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'(\'"
+    show (TCloseP   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \')\'"
+    show (TOpenB    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'[\'"
+    show (TCloseB   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \']\'"
+    show (TOpenC    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'{\'"
+    show (TCloseC   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'}\'"
+    show (TLess     (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'<\'"
+    show (TGreat    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'>\'"
+    show (TPercent  (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'%\'"
+    show (TComma    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \',\'"
+    show (TSColon   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \';\'"
+    show (TColon    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \':\'"
+    show (TPoint    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'.\'"
+    show (TRef      (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'?\'"
+    show (TArrow    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'->\'"
+    show (TTrue     (AlexPn _ i j)) = (showPos i j) ++ " - Literal: \'true\'"
+    show (TFalse    (AlexPn _ i j)) = (showPos i j) ++ " - Literal: \'false'"
+    show (TIdent    (AlexPn _ i j) s) = (showPos i j) ++ " - Id: " ++ s
+    show (TType     (AlexPn _ i j) s) = (showPos i j) ++ " - Type: " ++ s
+    show (TNum      (AlexPn _ i j) s) = (showPos i j) ++ " - Number: " ++ s
+    show (TString   (AlexPn _ i j) s) = (showPos i j) ++ " - String: \"" ++ s ++ "\""
+    show (TChar     (AlexPn _ i j) s) = (showPos i j) ++ " - Char: \'" ++ s ++ "\'"
+    show (TUndef    (AlexPn _ i j) s) = (showPos i j) ++ " - Unexpected token: " ++ s
 
-show_token :: Token -> String
-show_token tok = show_pos tok ++ ": caracter inesperado" ++ " '" ++ show_val tok ++ "'"
-
-show_val :: Token -> String
-show_val (TUndef p s) = s
+showPos :: Int -> Int -> String
+showPos i j = "Row " ++ show i ++ ", Column " ++ show j
 
 undef :: Token -> Bool
-undef (TUndef p s) = True
+undef (TUndef _ _) = True
 undef _            = False
 
 filePath :: [String] -> String
@@ -229,8 +245,7 @@ main = do
   let inv =  filter undef toks
   let val = (inv == [])
   case val of
-      False -> do mapM_ putStrLn $ P.map show_token inv
-      True  -> do
-                putStr $ "OK"
+      False -> do mapM_ putStrLn $ P.map show inv
+      True  -> do mapM_ putStrLn $ P.map show toks
     
 }
