@@ -1,9 +1,5 @@
 {
-module Main(main) where
-import System.IO
-import System.Environment
-import Data.Char
-import Prelude as P
+module Lexer where
 }
 
 %wrapper "posn"
@@ -225,27 +221,4 @@ instance Show Token where
 
 showPos :: Int -> Int -> String
 showPos i j = "Row " ++ show i ++ ", Column " ++ show j
-
-undef :: Token -> Bool
-undef (TUndef _ _) = True
-undef _            = False
-
-filePath :: [String] -> String
-filePath [] = error "No se introdujo un archivo."
-filePath (x:y:_) = error "Introduzca un solo argumento."
-filePath (x:_) = case reverse x of ('r':'d':'d':'.':_) -> x
-                                   (y:_) -> error "Formato de archivo incorrecto."
-
-main::IO ()
-main = do
-  args <- getArgs
-  handle <- openFile (filePath args) ReadMode  
-  s <- hGetContents handle  
-  let toks = alexScanTokens s
-  let inv =  filter undef toks
-  let val = (inv == [])
-  case val of
-      False -> do mapM_ putStrLn $ P.map show inv
-      True  -> do mapM_ putStrLn $ P.map show toks
-    
 }
