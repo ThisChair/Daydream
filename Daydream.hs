@@ -13,8 +13,8 @@ data Flag =
     deriving (Eq,Ord,Enum,Show,Bounded)
 
 flags =
-    [Option ['l'] ["lexer"]  (NoArg Lexer)  "Runs only the lexer."
-    ,Option ['p'] ["parser"] (NoArg Parser) "Runs the lexer and the parser."
+    [Option ['l'] ["lexer"]  (NoArg Lexer)  "Runs only the lexical analyzer and prints the token list."
+    ,Option ['p'] ["parser"] (NoArg Parser) "Runs the syntax analyzer and prints the syntax tree."
     ,Option ['h'] ["help"]   (NoArg Help)   "Prints this help message."
     ]
 
