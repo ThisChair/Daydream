@@ -5,6 +5,7 @@ import System.Environment
 import System.Exit
 import System.Console.GetOpt
 import Data.List
+import Parser
 
 data Flag =
     Lexer  |
@@ -58,20 +59,14 @@ main = do
     (opts,file) <- getArgs >>= parse
     handle <- openFile file ReadMode  
     s <- hGetContents handle
-    if Parser `elem` opts
-        then do
-            let toks = alexScanTokens s
-            let inv =  filter undef toks
-            let val = (inv == [])
-            if val 
-                then putStrLn "Here we parse later."
-                else printTokList inv
+    let toks = alexScanTokens s
+    let inv = filter undef toks
+    let val = (inv /= [])
+    if val 
+        then printTokList inv
         else if Lexer `elem` opts
             then do
-                let toks = alexScanTokens s
-                let inv =  filter undef toks
-                let val = (inv == [])
-                if val
-                    then printTokList toks
-                    else printTokList inv
-            else putStrLn "Do everything."
+                printTokList toks
+                parseDdr toks
+            else do
+                parseDdr toks
