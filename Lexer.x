@@ -76,9 +76,9 @@ tokens :-
     [a-z][a-zA-Z0-9_]*\'*   { (\p s -> TIdent p s) }
     [A-Z][a-z]*             { (\p s -> TType  p s) }
     $digit+(\.$digit+)?      { (\p s -> TNum  p s) }
-    \"($print | (\\\\) | (\\n) | (\\\"))*\"       
+    \"($print | (\\\\) | (\\n) | (\\\"))*\"
                             { (\p s -> TString p s) }
-    \'($print | (\\\\) | (\\n) | (\\\"))\'       
+    \'($print | (\\\\) | (\\n) | (\\\"))\'
                             { (\p s -> TChar p s) }
     .                       {TUndef}
 
@@ -165,6 +165,7 @@ instance Show Token where
     show (TElse     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'else\'"
     show (TWhile    (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'while\'"
     show (TFor      (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'for\'"
+    show (TTo       (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'to\'"
     show (TFrom     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'from\'"
     show (TWith     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'with\'"
     show (TIn       (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'in\'"

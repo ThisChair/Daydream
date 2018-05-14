@@ -1,0 +1,54 @@
+import Queue
+
+data Edge
+dream
+    Edge((Node,Int,Node) pair_of_nodes);
+wake
+
+data Graph
+dream
+    Edges([Edge] edge_list);
+    Nodes([Node] node_list);
+wake
+
+Graph g;
+Int graph_size = 0;
+
+Int a,b = 0,1;
+Bool stop = false;
+
+if !stop then
+dream
+    for Int x from 0 to 100 with x if x % 2 == 0
+    dream
+        Char msg = "even node";
+    wake
+wake else
+dream
+    stop = true;
+wake
+
+[Bool] lista_bool = [false,false,false,false,false,false,true];
+Bool guard = lista_bool[0];
+
+while guard /= true
+dream
+    guard = lista_bool[0];
+wake
+
+[Int] lista_int = [1,3,5,7,9,5,11,17,1,3];
+
+for Int n in lista_int if n % 2 == 0
+dream
+    Char a = "Not even";
+wake
+
+Int a = 0;
+Float f,g,h;
+Bool b , c = false , true;
+Char char = 'c';
+[Char] list_char = "Hello, World";
+[Float] list_float = [0.012,3.14,6.28];
+{[Bool]:4} array_bool = {false,true,false,true};
+(Int,Char) triple_type;
+[Int:[Char]] dicc = [0:"hello",1:"world"];

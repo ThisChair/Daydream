@@ -90,171 +90,173 @@ import Lexer
 %%
 
 -- Inicio
-S : Imports Ins                { % putStrLn "S : Imports Ins"  }
+S : Imports Ins                { % putStrLn "S -> Imports Ins" }
 
 -- Importaciones
-Imports : Imports import Type  { % putStrLn ""  }
-        | {- empty -}          { % putStrLn "" }
+Imports : Imports import Type  { % putStrLn "Imports -> Imports import Type" }
+        | {- empty -}          { % putStrLn "Imports -> {- empty -}" }
 
 -- Instrucciones
-Ins : Ins In                   {  % putStrLn "" }
-    | {- empty -}              {  % putStrLn "" }
+Ins : Ins In                   { % putStrLn "Ins -> Ins In" }
+    | {- empty -}              { % putStrLn "Ins -> {- empty -}" }
 
-In : Body ';'                  {  % putStrLn "" }
-   | Block                     {  % putStrLn "" }
-   | Algebraic                 {  % putStrLn "" }
+In : Body ';'                  { % putStrLn "In -> Body ';'" }
+   | Block                     { % putStrLn "In -> Block" }
+   | Algebraic                 { % putStrLn "In -> Algebraic" }
+   | Selector                  { % putStrLn "In -> Selector" }
+   | Iterator                  { % putStrLn "In -> Iterator" }
+   | Function                  { % putStrLn "In -> Function" }
 
-Body : Declaration             {  % putStrLn "" }
-     | Assign                  {  % putStrLn "" }
-     | Selector                {  % putStrLn "" }
-     | Iterator                {  % putStrLn "" }
-     | Function                { % putStrLn "" }
-     | return Exp              { % putStrLn "" }
-     | {- empty -}             {  % putStrLn "" }
+Body : Declaration             { % putStrLn "Body -> Declaration" }
+     | Assign                  { % putStrLn "Body -> Assign" }
+     | return Exp              { % putStrLn "Body -> return Exp" }
+     | {- empty -}             { % putStrLn "Body -> {- emtpy -}" }
 
-Block : dream Ins wake         {  % putStrLn ""  }
+-- Bloques
+Block : dream Ins wake         { % putStrLn "Block -> dream Ins wake" }
 
-Algebraic : data type dream Sums wake  { putStrLn "Alg"  }
+Algebraic : data type dream Sums wake  { % putStrLn "Algebraic -> data type dream Sums wake" }
 
-Sums : Sums Sum                {  % putStrLn "" }
-     | Sum                     { % putStrLn ""  }
+Sums : Sums Sum                { % putStrLn "Sums -> Sums Sum" }
+     | Sum                     { % putStrLn "Sums -> Sum " }
 
-Sum : type '(' Prods ')' ';'   {  % putStrLn "" }
+Sum : type '(' Prods ')' ';'   { % putStrLn "Sum -> type '(' Prods ')' ';'" }
 
-Declaration : Type Ids         { % putStrLn ""  }
-            | Type DAssign     { % putStrLn ""  }
+Declaration : Type Ids         { % putStrLn "Declaration -> Type Ids" }
+            | Type DAssign     { % putStrLn "Declaration -> Type DAssign" }
 
-DAssign : id ',' DAssign ',' RV { % putStrLn ""  }
-        | id '=' RV             { % putStrLn "" }
+DAssign : id ',' DAssign ',' RV { % putStrLn "DAssign -> id ',' DAssign ',' RV" }
+        | id '=' RV             { % putStrLn "DAssign -> id '=' RV" }
 
-Prods : Prods ',' Prod         { % putStrLn ""  }
-      | Prod                   { % putStrLn ""  }
+Prods : Prods ',' Prod         { % putStrLn "Prods -> Prods ',' Prod" }
+      | Prod                   { % putStrLn "Prods -> Prod" }
 
-Prod : Type id                 { % putStrLn ""  }
+Prod : Type id                 { % putStrLn "Prod -> Type id" }
 
 -- Identificadores
-Ids : Ids ',' id               { % putStrLn ""  }
-    | id                       { % putStrLn "" }
+Ids : id ',' Ids               { % putStrLn "Ids -> Ids ',' id" }
+    | id                       { % putStrLn "Ids -> id" }
 
-Id : id                        {  % putStrLn "" }
-   | Id '[' Exp ']'            { % putStrLn ""  }
-   | Id '.' MCall              { % putStrLn ""  }
+Id : id                        {  % putStrLn "Id -> id" }
+   | Id '[' Exp ']'            { % putStrLn "Id -> Id '[' Exp ']'" }
+   | Id '.' MCall              { % putStrLn "Id -> Id '.' MCall" }
 
-MCall : MCall '.' id           { % putStrLn "" }
-      | id                     { % putStrLn "" } 
+MCall : MCall '.' id           { % putStrLn "MCall -> MCall '.' id" }
+      | id                     { % putStrLn "MCall -> id" }
 
-Types : Types ';' Type         { % putStrLn "" }
-      | Type                   { % putStrLn "" } 
+Types : Types ',' Type         { % putStrLn "Types -> Types ',' Type" }
+      | Type                   { % putStrLn "Types -> Type" }
 
-Type : type                    { % putStrLn "" } 
-     | '[' Type ']'            { % putStrLn ""  }
-     | '{' Type ':' num '}'    {  % putStrLn "" }
-     | '[' Type ':' Type ']'   { % putStrLn ""   }
-     | '(' Types ')'           { % putStrLn "" }
+Type : type                    { % putStrLn "Type -> type" }
+     | '[' Type ']'            { % putStrLn "Type -> '[' Type ']'" }
+     | '{' Type ':' num '}'    { % putStrLn "Type -> '{' Type ': num '}'" }
+     | '[' Type ':' Type ']'   { % putStrLn "Type -> '[' Type ':' Type ']'" }
+     | '(' Types ')'           { % putStrLn "Type -> '(' Types ')'" }
 
-Assign : Id ',' Assign ',' RV  { % putStrLn ""  }
-       | Id '=' RV             { % putStrLn ""  }
+Assign : Id ',' Assign ',' RV  { % putStrLn "Assign -> Id ',' Assign ',' RV" }
+       | Id '=' RV             { % putStrLn "Assign -> Id '=' RV" }
 
-RV : Exp    { % putStrLn "" }
-   | Cons   { % putStrLn ""  }
+RV : Exp    { % putStrLn "RV -> Exp" }
+   | Cons   { % putStrLn "RV -> Cons" }
 
-Cons : type '(' ')'      { % putStrLn ""  }
-     | type '(' Exps ')' { % putStrLn ""  }
+Cons : type '(' ')'      { % putStrLn "Cons -> type '(' ')'" }
+     | type '(' Exps ')' { % putStrLn "Cons -> type '(' Exps ')'" }
 
 -- Expresiones
-Exp : Exp '+' Exp              { % putStrLn ""  }
-    | Exp '-' Exp              { % putStrLn ""  } 
-    | Exp '*' Exp              { % putStrLn ""  } 
-    | Exp '/' Exp              { % putStrLn "" }
-    | Exp '%' Exp              { % putStrLn "" }
-    | Exp '**' Exp             { % putStrLn "" }
-    | Exp '//' Exp             { % putStrLn "" }
-    | Exp '<<' Exp             {  % putStrLn "" }
-    | Exp '>>' Exp             { % putStrLn ""  }
-    | Exp '|' Exp              { % putStrLn ""  }
-    | Exp '&' Exp              { % putStrLn ""  }
-    | Exp '^' Exp              {  % putStrLn "" }
-    | Exp '||' Exp             { % putStrLn "" }
-    | Exp '&&' Exp             { % putStrLn "" }
-    | Exp '>' Exp              { % putStrLn ""  }
-    | Exp '<' Exp              { % putStrLn ""  }
-    | Exp '>=' Exp             { % putStrLn "" }
-    | Exp '<=' Exp             { % putStrLn "" }
-    | Exp '==' Exp             { % putStrLn "" }
-    | Exp '/=' Exp             {  % putStrLn "" }
-    | '-' Exp %prec NEG        { % putStrLn "" }
-    | '!' Exp                  { % putStrLn "" }
-    | '~' Exp                  { % putStrLn "" }
-    | Exp '?'                  { % putStrLn "" }
-    | '(' Exp ')'              { % putStrLn "" }
-    | Id                       { % putStrLn "" }
-    | num                      { % putStrLn "" }
-    | true                     { % putStrLn "" }
-    | false                    { % putStrLn "" }
-    | str                      { % putStrLn "" }
-    | char                     { % putStrLn "" }
-    | List                     { % putStrLn "" }
-    | Arr                      { % putStrLn "" }
-    | Dict                     { % putStrLn "" }
-    | Tup                      { % putStrLn "" }
-    | FunCall                  { % putStrLn "" }
+Exp : Exp '+' Exp              { % putStrLn "Exp -> Exp '+' Exp" }
+    | Exp '-' Exp              { % putStrLn "Exp -> Exp '-' Exp" }
+    | Exp '*' Exp              { % putStrLn "Exp -> Exp '*' Exp" }
+    | Exp '/' Exp              { % putStrLn "Exp -> Exp '/' Exp" }
+    | Exp '%' Exp              { % putStrLn "Exp -> Exp '%' Exp" }
+    | Exp '**' Exp             { % putStrLn "Exp -> Exp '**' Exp" }
+    | Exp '//' Exp             { % putStrLn "Exp -> Exp '//' Exp" }
+    | Exp '<<' Exp             { % putStrLn "Exp -> Exp '<<' Exp" }
+    | Exp '>>' Exp             { % putStrLn "Exp -> Exp '>>' Exp" }
+    | Exp '|' Exp              { % putStrLn "Exp -> Exp '|' Exp" }
+    | Exp '^' Exp              { % putStrLn "Exp -> Exp '^' Exp" }
+    | Exp '&' Exp              { % putStrLn "Exp -> Exp '&' Exp" }
+    | Exp '||' Exp             { % putStrLn "Exp -> Exp '||' Exp" }
+    | Exp '&&' Exp             { % putStrLn "Exp -> Exp '&&' Exp " }
+    | Exp '>' Exp              { % putStrLn "Exp -> Exp '>' Exp" }
+    | Exp '<' Exp              { % putStrLn "Exp -> Exp '<' Exp" }
+    | Exp '>=' Exp             { % putStrLn "Exp -> Exp '>=' Exp" }
+    | Exp '<=' Exp             { % putStrLn "Exp -> Exp '<=' Exp" }
+    | Exp '==' Exp             { % putStrLn "Exp -> Exp '==' Exp " }
+    | Exp '/=' Exp             { % putStrLn "Exp -> Exp '/=' Exp" }
+    | '-' Exp %prec NEG        { % putStrLn "Exp -> '-' Exp %prec NEG" }
+    | '!' Exp                  { % putStrLn "Exp -> '!' Exp" }
+    | '~' Exp                  { % putStrLn "Exp -> '~' Exp" }
+    | Exp '?'                  { % putStrLn "Exp ->  Exp '?'" }
+    | '(' Exp ')'              { % putStrLn "Exp -> '(' Exp ')'" }
+    | Id                       { % putStrLn "Exp -> Id" }
+    | num                      { % putStrLn "Exp -> num" }
+    | true                     { % putStrLn "Exp -> true" }
+    | false                    { % putStrLn "Exp -> false" }
+    | str                      { % putStrLn "Exp -> str" }
+    | char                     { % putStrLn "Exp -> char" }
+    | List                     { % putStrLn "Exp -> List" }
+    | Arr                      { % putStrLn "Exp -> Arr" }
+    | Dict                     { % putStrLn "Exp -> Dict" }
+    | Tup                      { % putStrLn "Exp -> Tup" }
+    | FunCall                  { % putStrLn "Exp -> FunCall" }
 
-Exps : Exps ',' Exp            {  % putStrLn "" }
-     | Exp                     {  % putStrLn "" }
+Exps : Exps ',' Exp            { % putStrLn "Exps -> Exps ',' Exp" }
+     | Exp                     { % putStrLn "Exps -> Exp" }
 
-List : '[' Exps ']'            {  % putStrLn "" }
-     | '[' ']'                 {  % putStrLn "" }
+List : '[' Exps ']'            { % putStrLn "List -> '[' Exps ']'" }
+     | '[' ']'                 { % putStrLn "List -> '[' ']'" }
 
-Arr : '{' Exps '}'             { % putStrLn ""  }
-    | '{' '}'                  { % putStrLn "" }
+Arr : '{' Exps '}'             { % putStrLn "Arr -> '{' Exps '}'" }
+    | '{' '}'                  { % putStrLn "Arr -> '{' '}'" }
 
-Dict : '[' KV ']'             {  % putStrLn "" }
+Dict : '[' KV ']'              { % putStrLn "Dict -> '[' KV ']'" }
 
-KV : KV ',' Exp ':' Exp        { % putStrLn ""  }
-   | Exp ':' Exp               { % putStrLn ""  }
+KV : KV ',' Exp ':' Exp        { % putStrLn "KV -> KV ',' Exp ':' Exp" }
+   | Exp ':' Exp               { % putStrLn "Exp ':' Exp" }
 
-Tup : '(' Exps ',' Exp ')'     { % putStrLn ""  }
+Tup : '(' Exp ',' Exps ')'     { % putStrLn "Tup -> '(' Exp ',' Exps ')'" }
 
 -- Funciones
-FunCall : id '(' Exps ')'      {  % putStrLn ""  }
-        | id '(' ')'           {  % putStrLn ""  }
+FunCall : id '(' Exps ')'      {  % putStrLn "FunCall -> id '(' Exps ')'" }
+        | id '(' ')'           {  % putStrLn "FunCall -> id '(' ')'" }
 
-Function : func '(' Type Ret Exp ')' Block         { % putStrLn ""  }
-         | func '(' Type NoRet Exp ')' Block       { % putStrLn ""  }
-         | func '(' '->' Type ')' id '(' ')' Block { % putStrLn ""  }
-         | func '(' ')' id '(' ')' Block           { % putStrLn ""  }
+Function : func '(' Type Ret Exp ')' Block         { % putStrLn "Function -> func '(' Type Ret Exp ')' Block" }
+         | func '(' Type NoRet Exp ')' Block       { % putStrLn "Function -> func '(' Type NoRet Exp ')' Block" }
+         | func '(' '->' Type ')' id '(' ')' Block { % putStrLn "Function -> func '(' '->' Type ')' id '(' ')' Block" }
+         | func '(' ')' id '(' ')' Block           { % putStrLn "Function -> func '(' ')' id '(' ')' Block" }
 
-Ret : ',' Type Ret Exp ','     { % putStrLn ""  }
-    | '->' Type ')' id '('     { % putStrLn ""  }
+Ret : ',' Type Ret Exp ','     { % putStrLn "Ret -> ',' Type Ret Exp ','" }
+    | '->' Type ')' id '('     { % putStrLn "Ret -> '->' Type ')' id '('" }
 
-NoRet : '->' ',' Type NoRet Exp ',' { % putStrLn ""  }
-      | ')' id '('                  { % putStrLn ""  }
+NoRet : '->' ',' Type NoRet Exp ',' { % putStrLn "NoRet -> '->' ',' Type NoRet Exp ','" }
+      | ')' id '('                  { % putStrLn "NoRet -> ')' id '('" }
 
 -- Selectores
-Selector : If                  { % putStrLn ""  }
-         | Case                { % putStrLn ""  }
+Selector : If                  { % putStrLn "Selector -> If" }
+         | Case                { % putStrLn "Selector -> Case" }
 
-If : if Exp then In            { % putStrLn "" }
-   | if Exp then In else In    {  % putStrLn ""  }
+If : if Exp then In            { % putStrLn "If -> if Exp then In" }
+   | if Exp then In else In    { % putStrLn "If -> if Exp then In else In" }
 
-Case : case Exp of Conds       {  % putStrLn ""  }
+Case : case Exp of Conds ';'   { % putStrLn "Case -> case Exp of Conds ';'" }
 
 -- Condiciones
-Conds : Conds Cond             {  % putStrLn ""  }
-      | {- empty -}            { % putStrLn ""   }
+Conds : Conds Cond             { % putStrLn "Conds -> Conds Cond" }
+      | {- empty -}            { % putStrLn "Conds -> {- empty -}" }
 
-Cond : Exp In                  {  % putStrLn ""  }
+Cond : Exp In                  {  % putStrLn "Cond -> Exp In" }
 
 -- Iteradores
-Iterator : Indet               {% putStrLn ""  }
-         | Det                 {  % putStrLn ""  }
+Iterator : Indet               { % putStrLn "Iterator -> Indet" }
+         | Det                 { % putStrLn "Iterator -> Det" }
 
-Indet : while Exp In           { % putStrLn ""   }
+Indet : while Exp In           { % putStrLn "Indet -> while Exp In" }
 
-Det : for Type Id from Exp to Exp                     {  % putStrLn ""  }
-    | for Type Id from Exp to Exp if Exp In           {  % putStrLn ""  }
-    | for Type Id from Exp to Exp with Exp if Exp In  {  % putStrLn ""  }
-    | for Type Id from Exp to Exp with Exp In         {  % putStrLn ""  }
+Det : for Type Id from Exp to Exp                     {  % putStrLn "Det -> for Type Id from Exp to Exp" }
+    | for Type Id from Exp to Exp if Exp In           {  % putStrLn "Det -> for Type Id from Exp to Exp if Exp In" }
+    | for Type Id from Exp to Exp with Exp if Exp In  {  % putStrLn "Det -> for Type Id from Exp to Exp with Exp if Exp In" }
+    | for Type Id from Exp to Exp with Exp In         {  % putStrLn "Det -> for Type Id from Exp to Exp with Exp In" }
+    | for Type Id in Exp if Exp In                    {  % putStrLn "Det -> for Type Id in Exp if Exp In" }
 
 {
 parseError :: [Token] -> a
