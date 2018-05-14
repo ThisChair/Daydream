@@ -75,7 +75,7 @@ tokens :-
     false                   { (\p s -> TFalse p) }
     [a-z][a-zA-Z0-9_]*\'*   { (\p s -> TIdent p s) }
     [A-Z][a-z]*             { (\p s -> TType  p s) }
-    digit+(\.$digit+)?      { (\p s -> TNum  p s) }
+    $digit+(\.$digit+)?      { (\p s -> TNum  p s) }
     \"($print | (\\\\) | (\\n) | (\\\"))*\"       
                             { (\p s -> TString p s) }
     \'($print | (\\\\) | (\\n) | (\\\"))\'       
