@@ -2,7 +2,7 @@
 module Parser where
 import Lexer
 }
-
+%monad { IO }
 %name parseDdr
 %tokentype { Token }
 %error { parseError }
@@ -90,173 +90,174 @@ import Lexer
 %%
 
 -- Inicio
-S : Imports Ins                { putStrLn "Inicio" }
+S : Imports Ins                { % putStrLn "S : Imports Ins"  }
 
 -- Importaciones
-Imports : Imports import Type  { }
-        | {- empty -}          { }
+Imports : Imports import Type  { % putStrLn ""  }
+        | {- empty -}          { % putStrLn "" }
 
 -- Instrucciones
-Ins : Ins In                   {  }
-    | {- empty -}              {  }
+Ins : Ins In                   {  % putStrLn "" }
+    | {- empty -}              {  % putStrLn "" }
 
-In : Body ';'                  {  }
-   | Block                     {  }
-   | Algebraic                 {  }
+In : Body ';'                  {  % putStrLn "" }
+   | Block                     {  % putStrLn "" }
+   | Algebraic                 {  % putStrLn "" }
 
-Body : Declaration             {  }
-     | Assign                  {  }
-     | Selector                {  }
-     | Iterator                {  }
-     | Function                { }
-     | return Exp              { }
-     | {- empty -}             {  }
+Body : Declaration             {  % putStrLn "" }
+     | Assign                  {  % putStrLn "" }
+     | Selector                {  % putStrLn "" }
+     | Iterator                {  % putStrLn "" }
+     | Function                { % putStrLn "" }
+     | return Exp              { % putStrLn "" }
+     | {- empty -}             {  % putStrLn "" }
 
-Block : dream Ins wake         {   }
+Block : dream Ins wake         {  % putStrLn ""  }
 
-Algebraic : data type dream Sums wake  {  }
+Algebraic : data type dream Sums wake  { putStrLn "Alg"  }
 
-Sums : Sums Sum                {  }
-     | Sum                     {  }
+Sums : Sums Sum                {  % putStrLn "" }
+     | Sum                     { % putStrLn ""  }
 
-Sum : type '(' Prods ')' ';'   {  }
+Sum : type '(' Prods ')' ';'   {  % putStrLn "" }
 
-Declaration : Type Ids         {  }
-            | Type DAssign     {  }
+Declaration : Type Ids         { % putStrLn ""  }
+            | Type DAssign     { % putStrLn ""  }
 
-DAssign : id ',' DAssign ',' RV {  }
-        | id '=' RV             { }
+DAssign : id ',' DAssign ',' RV { % putStrLn ""  }
+        | id '=' RV             { % putStrLn "" }
 
-Prods : Prods ',' Prod         {  }
-      | Prod                   {  }
+Prods : Prods ',' Prod         { % putStrLn ""  }
+      | Prod                   { % putStrLn ""  }
 
-Prod : Type id                 {  }
+Prod : Type id                 { % putStrLn ""  }
 
 -- Identificadores
-Ids : Ids ',' id               {  }
-    | id                       { }
+Ids : Ids ',' id               { % putStrLn ""  }
+    | id                       { % putStrLn "" }
 
-Id : id                        {  }
-   | Id '[' Exp ']'            {  }
-   | Id '.' MCall              {  }
+Id : id                        {  % putStrLn "" }
+   | Id '[' Exp ']'            { % putStrLn ""  }
+   | Id '.' MCall              { % putStrLn ""  }
 
-MCall : MCall '.' id           { }
-      | id                     { } 
+MCall : MCall '.' id           { % putStrLn "" }
+      | id                     { % putStrLn "" } 
 
-Types : Types ';' Type         { }
-      | Type                   { } 
+Types : Types ';' Type         { % putStrLn "" }
+      | Type                   { % putStrLn "" } 
 
-Type : type                    { } 
-     | '[' Type ']'            { }
-     | '{' Type ':' num '}'    {  }
-     | '[' Type ':' Type ']'   {   }
-     | '(' Types ')'           { }
+Type : type                    { % putStrLn "" } 
+     | '[' Type ']'            { % putStrLn ""  }
+     | '{' Type ':' num '}'    {  % putStrLn "" }
+     | '[' Type ':' Type ']'   { % putStrLn ""   }
+     | '(' Types ')'           { % putStrLn "" }
 
-Assign : Id ',' Assign ',' RV  {  }
-       | Id '=' RV             {  }
+Assign : Id ',' Assign ',' RV  { % putStrLn ""  }
+       | Id '=' RV             { % putStrLn ""  }
 
-RV : Exp    { }
-   | Cons   {  }
+RV : Exp    { % putStrLn "" }
+   | Cons   { % putStrLn ""  }
 
-Cons : type '(' ')'      {  }
-     | type '(' Exps ')' {  }
+Cons : type '(' ')'      { % putStrLn ""  }
+     | type '(' Exps ')' { % putStrLn ""  }
 
 -- Expresiones
-Exp : Exp '+' Exp              {  }
-    | Exp '-' Exp              {  } 
-    | Exp '*' Exp              {  } 
-    | Exp '/' Exp              { }
-    | Exp '%' Exp              { }
-    | Exp '**' Exp             { }
-    | Exp '//' Exp             { }
-    | Exp '<<' Exp             {  }
-    | Exp '>>' Exp             {  }
-    | Exp '|' Exp              {  }
-    | Exp '&' Exp              {  }
-    | Exp '^' Exp              {  }
-    | Exp '||' Exp             { }
-    | Exp '&&' Exp             { }
-    | Exp '>' Exp              {  }
-    | Exp '<' Exp              {  }
-    | Exp '>=' Exp             { }
-    | Exp '<=' Exp             { }
-    | Exp '==' Exp             { }
-    | Exp '/=' Exp             {  }
-    | '-' Exp %prec NEG        { }
-    | '!' Exp                  { }
-    | '~' Exp                  { }
-    | Exp '?'                  { }
-    | '(' Exp ')'              { }
-    | Id                       { }
-    | num                      { }
-    | true                     { }
-    | false                    { }
-    | str                      { }
-    | char                     { }
-    | List                     { }
-    | Arr                      { }
-    | Dict                     { }
-    | Tup                      { }
-    | FunCall                  { }
+Exp : Exp '+' Exp              { % putStrLn ""  }
+    | Exp '-' Exp              { % putStrLn ""  } 
+    | Exp '*' Exp              { % putStrLn ""  } 
+    | Exp '/' Exp              { % putStrLn "" }
+    | Exp '%' Exp              { % putStrLn "" }
+    | Exp '**' Exp             { % putStrLn "" }
+    | Exp '//' Exp             { % putStrLn "" }
+    | Exp '<<' Exp             {  % putStrLn "" }
+    | Exp '>>' Exp             { % putStrLn ""  }
+    | Exp '|' Exp              { % putStrLn ""  }
+    | Exp '&' Exp              { % putStrLn ""  }
+    | Exp '^' Exp              {  % putStrLn "" }
+    | Exp '||' Exp             { % putStrLn "" }
+    | Exp '&&' Exp             { % putStrLn "" }
+    | Exp '>' Exp              { % putStrLn ""  }
+    | Exp '<' Exp              { % putStrLn ""  }
+    | Exp '>=' Exp             { % putStrLn "" }
+    | Exp '<=' Exp             { % putStrLn "" }
+    | Exp '==' Exp             { % putStrLn "" }
+    | Exp '/=' Exp             {  % putStrLn "" }
+    | '-' Exp %prec NEG        { % putStrLn "" }
+    | '!' Exp                  { % putStrLn "" }
+    | '~' Exp                  { % putStrLn "" }
+    | Exp '?'                  { % putStrLn "" }
+    | '(' Exp ')'              { % putStrLn "" }
+    | Id                       { % putStrLn "" }
+    | num                      { % putStrLn "" }
+    | true                     { % putStrLn "" }
+    | false                    { % putStrLn "" }
+    | str                      { % putStrLn "" }
+    | char                     { % putStrLn "" }
+    | List                     { % putStrLn "" }
+    | Arr                      { % putStrLn "" }
+    | Dict                     { % putStrLn "" }
+    | Tup                      { % putStrLn "" }
+    | FunCall                  { % putStrLn "" }
 
-Exps : Exps ',' Exp            {  }
-     | Exp                     {  }
+Exps : Exps ',' Exp            {  % putStrLn "" }
+     | Exp                     {  % putStrLn "" }
 
-List : '[' Exps ']'            {  }
-     | '[' ']'                 {  }
+List : '[' Exps ']'            {  % putStrLn "" }
+     | '[' ']'                 {  % putStrLn "" }
 
-Arr : '{' Exps '}'             {  }
-    | '{' '}'                  { }
+Arr : '{' Exps '}'             { % putStrLn ""  }
+    | '{' '}'                  { % putStrLn "" }
 
-Dict : '[' KV ']'             {  }
+Dict : '[' KV ']'             {  % putStrLn "" }
 
-KV : KV ',' Exp ':' Exp        {  }
-   | Exp ':' Exp               {  }
+KV : KV ',' Exp ':' Exp        { % putStrLn ""  }
+   | Exp ':' Exp               { % putStrLn ""  }
 
-Tup : '(' Exps ',' Exp ')'     {  }
+Tup : '(' Exps ',' Exp ')'     { % putStrLn ""  }
 
 -- Funciones
-FunCall : id '(' Exps ')'      {   }
-        | id '(' ')'           {   }
+FunCall : id '(' Exps ')'      {  % putStrLn ""  }
+        | id '(' ')'           {  % putStrLn ""  }
 
-Function : func '(' Type Ret Exp ')' Block         {  }
-         | func '(' Type NoRet Exp ')' Block       {  }
-         | func '(' '->' Type ')' id '(' ')' Block {  }
-         | func '(' ')' id '(' ')' Block           {  }
+Function : func '(' Type Ret Exp ')' Block         { % putStrLn ""  }
+         | func '(' Type NoRet Exp ')' Block       { % putStrLn ""  }
+         | func '(' '->' Type ')' id '(' ')' Block { % putStrLn ""  }
+         | func '(' ')' id '(' ')' Block           { % putStrLn ""  }
 
-Ret : ',' Type Ret Exp ','     {  }
-    | '->' Type ')' id '('     {  }
+Ret : ',' Type Ret Exp ','     { % putStrLn ""  }
+    | '->' Type ')' id '('     { % putStrLn ""  }
 
-NoRet : '->' ',' Type NoRet Exp ',' {  }
-      | ')' id '('                  {  }
+NoRet : '->' ',' Type NoRet Exp ',' { % putStrLn ""  }
+      | ')' id '('                  { % putStrLn ""  }
 
 -- Selectores
-Selector : If                  {  }
-         | Case                {  }
+Selector : If                  { % putStrLn ""  }
+         | Case                { % putStrLn ""  }
 
-If : if Exp then In            { }
-   | if Exp then In else In    {   }
+If : if Exp then In            { % putStrLn "" }
+   | if Exp then In else In    {  % putStrLn ""  }
 
-Case : case Exp of Conds       {   }
+Case : case Exp of Conds       {  % putStrLn ""  }
 
 -- Condiciones
-Conds : Conds Cond             {   }
-      | {- empty -}            {   }
+Conds : Conds Cond             {  % putStrLn ""  }
+      | {- empty -}            { % putStrLn ""   }
 
-Cond : Exp In                  {   }
+Cond : Exp In                  {  % putStrLn ""  }
 
 -- Iteradores
-Iterator : Indet               { }
-         | Det                 {   }
+Iterator : Indet               {% putStrLn ""  }
+         | Det                 {  % putStrLn ""  }
 
-Indet : while Exp In           {   }
+Indet : while Exp In           { % putStrLn ""   }
 
-Det : for Type Id from Exp to Exp                     {   }
-    | for Type Id from Exp to Exp if Exp In           {   }
-    | for Type Id from Exp to Exp with Exp if Exp In  {   }
-    | for Type Id from Exp to Exp with Exp In         {   }
+Det : for Type Id from Exp to Exp                     {  % putStrLn ""  }
+    | for Type Id from Exp to Exp if Exp In           {  % putStrLn ""  }
+    | for Type Id from Exp to Exp with Exp if Exp In  {  % putStrLn ""  }
+    | for Type Id from Exp to Exp with Exp In         {  % putStrLn ""  }
 
 {
 parseError :: [Token] -> a
+parseError [] = error $ "Final inesperado"
 parseError _ = error $ "ERROR"
 }
