@@ -11,7 +11,7 @@ import Lexer
 
     dream      { TDream _ }
     read       { TRead _ }
-    println    { TPrintLn _ }
+    printLn    { TPrintLn _ }
     print      { TPrint _ }
     wake       { TWake _ }
     import     { TImport _ }
@@ -31,6 +31,7 @@ import Lexer
     data       { TData _ }
     case       { TCase _ }
     of         { TOf _ }
+    module     { TModule _ }
     '/='       { TNotEq _ }
     '&&'       { TAnd _ }
     '||'       { TOr _ }
@@ -90,7 +91,10 @@ import Lexer
 %%
 
 -- Inicio
-S : Imports Ins                { % putStrLn "S -> Imports Ins" }
+S : Mod Imports Ins                { % putStrLn "S -> Mod Imports Ins" }
+
+Mod : module type              { % putStrLn "Mod -> module type" }
+    | {- empty -}              { % putStrLn "Mod -> {- empty -}" }
 
 -- Importaciones
 Imports : Imports import Type  { % putStrLn "Imports -> Imports import Type" }
@@ -107,10 +111,20 @@ In : Body ';'                  { % putStrLn "In -> Body ';'" }
    | Iterator                  { % putStrLn "In -> Iterator" }
    | Function                  { % putStrLn "In -> Function" }
 
+
 Body : Declaration             { % putStrLn "Body -> Declaration" }
      | Assign                  { % putStrLn "Body -> Assign" }
      | return Exp              { % putStrLn "Body -> return Exp" }
+     | Print                   { % putStrLn "In -> Print" }
+     | PrintLn                 { % putStrLn "In -> PrintLn" }
+     | Read                    { % putStrLn "In -> Read " }
      | {- empty -}             { % putStrLn "Body -> {- emtpy -}" }
+
+Print : print Exp              { % putStrLn "Print -> print Exp" }
+
+PrintLn : printLn Exp          { % putStrLn "PrintLn -> printLn Exp" }
+
+Read : read Exp                { % putStrLn "Read -> read Exp" }
 
 -- Bloques
 Block : dream Ins wake         { % putStrLn "Block -> dream Ins wake" }

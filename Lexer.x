@@ -34,6 +34,7 @@ tokens :-
     data                    { (\p s -> TData     p) }
     case                    { (\p s -> TCase     p) }
     of                      { (\p s -> TOf       p) }
+    module                  { (\p s -> TModule   p) }
     -- Symbols
     \/\=                    { (\p s -> TNotEq   p) }
     \&\&                    { (\p s -> TAnd     p) }
@@ -74,7 +75,7 @@ tokens :-
     true                    { (\p s -> TTrue  p) }
     false                   { (\p s -> TFalse p) }
     [a-z][a-zA-Z0-9_]*\'*   { (\p s -> TIdent p s) }
-    [A-Z][a-z]*             { (\p s -> TType  p s) }
+    [A-Z][a-zA-Z]*          { (\p s -> TType  p s) }
     $digit+(\.$digit+)?      { (\p s -> TNum  p s) }
     \"($print | (\\\\) | (\\n) | (\\\"))*\"
                             { (\p s -> TString p s) }
@@ -108,6 +109,7 @@ data Token =
     TData       { tokenPos :: AlexPosn }                     |
     TCase       { tokenPos :: AlexPosn }                     |
     TOf         { tokenPos :: AlexPosn }                     |
+    TModule     { tokenPos :: AlexPosn }                     |
     TNotEq      { tokenPos :: AlexPosn }                     |
     TAnd        { tokenPos :: AlexPosn }                     |
     TOr         { tokenPos :: AlexPosn }                     |
@@ -176,6 +178,7 @@ instance Show Token where
     show (TData     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'data\'"
     show (TCase     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'case\'"
     show (TOf       (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'of\'"
+    show (TModule   (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'module\'"
     show (TNotEq    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'/=\'"
     show (TAnd      (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'&&\'"
     show (TOr       (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'||\'"
