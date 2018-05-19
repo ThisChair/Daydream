@@ -6,6 +6,7 @@ import System.Exit
 import System.Console.GetOpt
 import Data.List
 import Parser
+import Control.Monad.Trans.Except
 
 data Flag =
     Lexer  |
@@ -54,6 +55,10 @@ filePath (x:_) = case reverse x of
 printTokList :: [Token] -> IO()
 printTokList list = mapM_ putStrLn $ map show list
 
+reportRes :: Either String a -> IO ()
+reportRes (Left e) = putStrLn ("Error: " ++ show e)
+reportRes (Right _) = putStrLn ""
+
 main::IO ()
 main = do
     (opts,file) <- getArgs >>= parse
@@ -67,6 +72,8 @@ main = do
         else if Lexer `elem` opts
             then do
                 printTokList toks
-                parseDdr toks
+                p <- runExceptT $ parseDdr toks
+                reportRes p
             else do
-                parseDdr toks
+                p <- runExceptT $ parseDdr toks
+                reportRes p
