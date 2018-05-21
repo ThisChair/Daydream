@@ -106,20 +106,17 @@ Imports : Imports import type  { (Import $3) : $1 }
         | {- empty -}          {   [] }
 
 -- Instrucciones
-Body : Body Ins                  { $1 ++ $2 }
+Body : Body In                  { $2 : $1 }
      | Body Algebraic            { $1 }
-     | Body Declaration ';'      { $1 }
-     | Function                  { [$1] }
+     | Body Declaration          { $1 }
+     | Body Function             { $2 : $1 }
      | {- empty -}               { [] }
-
-Ins : Ins In                   {   ($2 : $1) }
-    | Ins Block                { $2 ++ $1 }
-    | In                       { [$1] }
 
 In : SingleI ';'               {   $1 }
    | Selector                  {   $1 }
    | Iterator                  {   $1 }
    | Block                     { Block $1 }
+
 SingleI : IDeclaration            { Assign $1 }
         | Assign                  { Assign $1 }
         | return Exp              { Ret $2 }
@@ -137,14 +134,15 @@ Read : read '(' ')'            { Read }
 -- Bloques
 Block : dream Body wake         { $2 }
 
-Algebraic : data type dream Sums wake  { }
+Algebraic : data type dream Sums wake  { % lift $ pushS (StackEntry 1 False "")  }
 
 Sums : Sums Sum                {     }
      | Sum                     {     }
 
 Sum : type '(' Prods ')' ';'   {     }
+    | type '(' ')' ';'         {     }
 
-Declaration : Type Ids         {     }
+Declaration : Type Ids ';'     {     }
 
 IDeclaration : Type DAssign { $2 }
 
@@ -158,7 +156,7 @@ Prods : Prods ',' Prod         {   }
 Prod : Type id                 {  }
 
 -- Identificadores
-Ids : Ids ',' id               { $2 : $1 }
+Ids : Ids ',' id               { $3 : $1 }
     | id                       { [$1] }
 
 Id : id                        { Variable $1  }
