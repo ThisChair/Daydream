@@ -1,22 +1,25 @@
 module SyntaxTree where
 import Lexer
-import Control.Monad.Trans.Except
 
-type ParseMonad = ExceptT String IO
+data Init = Init Module [Import] [Instruction] deriving (Show)
 
-data Init = Init [Import] [Instruction] deriving (Show)
+data Module = Module Token | Main deriving (Show)
 
 data Import = Import Token deriving (Show)
 
 data Instruction = 
-    Block [Instruction]                           |
-    TypeDec DataType                              |
-    Assign ([Identifier],[RightValue])            |
-    IfThen Exp [Instruction]               |
-    IfElse Exp [Instruction] [Instruction] |
-    While Exp [Instruction]                |
-    Det |
-    NonExists
+    Block [Instruction]                    |
+    Assign ([Identifier],[RightValue])     |
+    IfThen Exp Instruction                 |
+    IfElse Exp Instruction Instruction     |
+    While Exp Instruction                  |
+    Det                                    |
+    Ret Exp                                |
+    Continue                               |
+    Break                                  |
+    Print Exp                              |
+    PrintLn Exp                            |
+    Function
     deriving (Show)
 
 
@@ -42,14 +45,10 @@ data TypeName =
     Dict (TypeName,TypeName) 
     deriving (Show)
 
-data Declare =
-    Dec [TypeName] [Token]                |
-    DecA [TypeName] ([Token],[RightValue])
-    deriving (Show)
 
 data Identifier = 
     Variable Token               |
-    Index Identifier Token       |
+    Index Identifier Exp       |
     MemberCall Identifier [Token]
     deriving (Show) 
 
@@ -68,11 +67,11 @@ data Exp =
     EBitXor BitXor   |
     EOr     Or        |
     EAnd    And       |
-    EGeq    Geq       |
+    EGEq    GEq       |
     EGreat  Great     |
-    ELeq    Leq       |
+    ELEq    LEq       |
     ELess   Less      |
-    ENeq    Neq       |
+    ENEq    NEq       |
     EEqual  Equal     |
     ENeg    Exp |
     ENot    Exp |
@@ -83,7 +82,9 @@ data Exp =
     EArr    [Exp] |
     EDict   [(Exp,Exp)] |
     ETup    [Exp] |
-    EIdent  Identifier
+    EIdent  Identifier |
+    Read |
+    ERef Identifier
     deriving (Show)
 
 data SumOp    = SumOp   Exp Exp   deriving (Show)
@@ -100,11 +101,11 @@ data BitAnd = BitAnd Exp Exp deriving (Show)
 data BitXor = BitXor Exp Exp deriving (Show)
 data Or     = Or    Exp Exp   deriving (Show)
 data And    = And   Exp Exp   deriving (Show)
-data Geq    = Geq   Exp Exp   deriving (Show)
+data GEq    = GEq   Exp Exp   deriving (Show)
 data Great     = Great    Exp Exp   deriving (Show)
-data Leq    = Leq   Exp Exp   deriving (Show)
+data LEq    = LEq   Exp Exp   deriving (Show)
 data Less   = Less  Exp Exp   deriving (Show)
-data Neq    = Neq   Exp Exp   deriving (Show)
+data NEq    = NEq   Exp Exp   deriving (Show)
 data Equal = Equal Exp Exp deriving (Show)
 
 data FCall = FCall Token [Exp] deriving (Show)

@@ -3,7 +3,9 @@ module Parser where
 import Lexer
 import Control.Monad.Trans.Except
 import SyntaxTree
-import Control.Monad.IO.Class
+import SymTable
+import Control.Monad.IO.Class(liftIO)
+import Control.Monad.Trans.Class(lift)
 }
 %monad { ParseMonad }
 %name parseDdr
@@ -94,188 +96,194 @@ import Control.Monad.IO.Class
 %%
 
 -- Inicio
-S : Mod Imports Ins            { % liftIO $ putStrLn "S -> Mod Imports Ins" }
+S : Mod Imports Body            { Init $1 $2 $3 }
 
-Mod : module type              { % liftIO $ putStrLn "Mod -> module type" }
-    | {- empty -}              { % liftIO $ putStrLn "Mod -> {- empty -}" }
+Mod : module type              { Module $2 }
+    | {- empty -}              { Main }
 
 -- Importaciones
-Imports : Imports import Type  { % liftIO $ putStrLn "Imports -> Imports import Type" }
-        | {- empty -}          { % liftIO $ putStrLn "Imports -> {- empty -}" }
+Imports : Imports import type  { (Import $3) : $1 }
+        | {- empty -}          {   [] }
 
 -- Instrucciones
-Ins : Ins In                   { % liftIO $ putStrLn "Ins -> Ins In" }
-    | {- empty -}              { % liftIO $ putStrLn "Ins -> {- empty -}" }
+Body : Body Ins                  { $1 ++ $2 }
+     | Body Algebraic            { $1 }
+     | Body Declaration ';'      { $1 }
+     | Function                  { [$1] }
+     | {- empty -}               { [] }
 
-In : Body ';'                  { % liftIO $ putStrLn "In -> Body ';'" }
-   | Block                     { % liftIO $ putStrLn "In -> Block" }
-   | Algebraic                 { % liftIO $ putStrLn "In -> Algebraic" }
-   | Selector                  { % liftIO $ putStrLn "In -> Selector" }
-   | Iterator                  { % liftIO $ putStrLn "In -> Iterator" }
-   | Function                  { % liftIO $ putStrLn "In -> Function" }
+Ins : Ins In                   {   ($2 : $1) }
+    | Ins Block                { $2 ++ $1 }
+    | In                       { [$1] }
 
+In : SingleI ';'               {   $1 }
+   | Selector                  {   $1 }
+   | Iterator                  {   $1 }
+   | Block                     { Block $1 }
+SingleI : IDeclaration            { Assign $1 }
+        | Assign                  { Assign $1 }
+        | return Exp              { Ret $2 }
+        | Print                   { $1 }
+        | PrintLn                 { $1 }
+        | continue                { Continue }
+        | break                   { Break }
 
-Body : Declaration             { % liftIO $ putStrLn "Body -> Declaration" }
-     | Assign                  { % liftIO $ putStrLn "Body -> Assign" }
-     | return Exp              { % liftIO $ putStrLn "Body -> return Exp" }
-     | Print                   { % liftIO $ putStrLn "In -> Print" }
-     | PrintLn                 { % liftIO $ putStrLn "In -> PrintLn" }
-     | Read                    { % liftIO $ putStrLn "In -> Read " }
-     | {- empty -}             { % liftIO $ putStrLn "Body -> {- emtpy -}" }
+Print : print '(' Exp ')'      { Print $3}
 
-Print : print Exp              { % liftIO $ putStrLn "Print -> print Exp" }
+PrintLn : printLn '(' Exp ')'  { PrintLn $3 }
 
-PrintLn : printLn Exp          { % liftIO $ putStrLn "PrintLn -> printLn Exp" }
-
-Read : read Exp                { % liftIO $ putStrLn "Read -> read Exp" }
+Read : read '(' ')'            { Read }
 
 -- Bloques
-Block : dream Ins wake         { % liftIO $ putStrLn "Block -> dream Ins wake" }
+Block : dream Body wake         { $2 }
 
-Algebraic : data type dream Sums wake  { % liftIO $ putStrLn "Algebraic -> data type dream Sums wake" }
+Algebraic : data type dream Sums wake  { }
 
-Sums : Sums Sum                { % liftIO $ putStrLn "Sums -> Sums Sum" }
-     | Sum                     { % liftIO $ putStrLn "Sums -> Sum " }
+Sums : Sums Sum                {     }
+     | Sum                     {     }
 
-Sum : type '(' Prods ')' ';'   { % liftIO $ putStrLn "Sum -> type '(' Prods ')' ';'" }
+Sum : type '(' Prods ')' ';'   {     }
 
-Declaration : Type Ids         { % liftIO $ putStrLn "Declaration -> Type Ids" }
-            | Type DAssign     { % liftIO $ putStrLn "Declaration -> Type DAssign" }
+Declaration : Type Ids         {     }
 
-DAssign : id ',' DAssign ',' RV { % liftIO $ putStrLn "DAssign -> id ',' DAssign ',' RV" }
-        | id '=' RV             { % liftIO $ putStrLn "DAssign -> id '=' RV" }
+IDeclaration : Type DAssign { $2 }
 
-Prods : Prods ',' Prod         { % liftIO $ putStrLn "Prods -> Prods ',' Prod" }
-      | Prod                   { % liftIO $ putStrLn "Prods -> Prod" }
 
-Prod : Type id                 { % liftIO $ putStrLn "Prod -> Type id" }
+DAssign : id ',' DAssign ',' RV {   (( \(l,r) -> ((Variable $1):l,r++[$5]) ) $3)  }
+        | id '=' RV             {   ([Variable $1],[$3]) }
+
+Prods : Prods ',' Prod         {   }
+      | Prod                   {   }
+
+Prod : Type id                 {  }
 
 -- Identificadores
-Ids : Ids ',' id               { % liftIO $ putStrLn "Ids -> Ids ',' id" }
-    | id                       { % liftIO $ putStrLn "Ids -> id" }
+Ids : Ids ',' id               { $2 : $1 }
+    | id                       { [$1] }
 
-Id : id                        {  % liftIO $ putStrLn "Id -> id" }
-   | Id '[' Exp ']'            { % liftIO $ putStrLn "Id -> Id '[' Exp ']'" }
-   | Id '.' MCall              { % liftIO $ putStrLn "Id -> Id '.' MCall" }
+Id : id                        { Variable $1  }
+   | Id '[' Exp ']'            { Index $1 $3 }
+   | Id '.' MCall              { MemberCall $1 $3 }
 
-MCall : MCall '.' id           { % liftIO $ putStrLn "MCall -> MCall '.' id" }
-      | id                     { % liftIO $ putStrLn "MCall -> id" }
+MCall : MCall '.' id           {   ($3 : $1) }
+      | id                     {   [$1] }
 
-Types : Types ',' Type         { % liftIO $ putStrLn "Types -> Types ',' Type" }
-      | Type                   { % liftIO $ putStrLn "Types -> Type" }
+Types : Types ',' Type         {   ($3 : $1) }
+      | Type                   {   [$1] }
 
-Type : type                    { % liftIO $ putStrLn "Type -> type" }
-     | '[' Type ']'            { % liftIO $ putStrLn "Type -> '[' Type ']'" }
-     | '{' Type ':' num '}'    { % liftIO $ putStrLn "Type -> '{' Type ': num '}'" }
-     | '[' Type ':' Type ']'   { % liftIO $ putStrLn "Type -> '[' Type ':' Type ']'" }
-     | '(' Types ')'           { % liftIO $ putStrLn "Type -> '(' Types ')'" }
+Type : type                    {   (Name $1) }
+     | '[' Type ']'            {   (List $2) }
+     | '{' Type ':' num '}'    {   (Array $2 $4) }
+     | '[' Type ':' Type ']'   {   (Dict ($2,$4)) }
+     | '(' Types ')'           {   (Tuple $2) }
 
-Assign : Id ',' Assign ',' RV  { % liftIO $ putStrLn "Assign -> Id ',' Assign ',' RV" }
-       | Id '=' RV             { % liftIO $ putStrLn "Assign -> Id '=' RV" }
+Assign : Id ',' Assign ',' RV  {   (( \(l,r) -> ($1:l,r++[$5]) ) $3) }
+       | Id '=' RV             {   ([$1],[$3]) }
 
-RV : Exp    { % liftIO $ putStrLn "RV -> Exp" }
-   | Cons   { % liftIO $ putStrLn "RV -> Cons" }
+RV : Exp    {   (ValueExp $1) }
+   | Cons   {   (ValueCons $1) }
 
-Cons : type '(' ')'      { % liftIO $ putStrLn "Cons -> type '(' ')'" }
-     | type '(' Exps ')' { % liftIO $ putStrLn "Cons -> type '(' Exps ')'" }
+Cons : type '(' ')'      {   (CCall $1 []) }
+     | type '(' Exps ')' {   (CCall $1 $3) }
 
 -- Expresiones
-Exp : Exp '+' Exp              { % liftIO $ putStrLn "Exp -> Exp '+' Exp" }
-    | Exp '-' Exp              { % liftIO $ putStrLn "Exp -> Exp '-' Exp" }
-    | Exp '*' Exp              { % liftIO $ putStrLn "Exp -> Exp '*' Exp" }
-    | Exp '/' Exp              { % liftIO $ putStrLn "Exp -> Exp '/' Exp" }
-    | Exp '%' Exp              { % liftIO $ putStrLn "Exp -> Exp '%' Exp" }
-    | Exp '**' Exp             { % liftIO $ putStrLn "Exp -> Exp '**' Exp" }
-    | Exp '//' Exp             { % liftIO $ putStrLn "Exp -> Exp '//' Exp" }
-    | Exp '<<' Exp             { % liftIO $ putStrLn "Exp -> Exp '<<' Exp" }
-    | Exp '>>' Exp             { % liftIO $ putStrLn "Exp -> Exp '>>' Exp" }
-    | Exp '|' Exp              { % liftIO $ putStrLn "Exp -> Exp '|' Exp" }
-    | Exp '^' Exp              { % liftIO $ putStrLn "Exp -> Exp '^' Exp" }
-    | Exp '&' Exp              { % liftIO $ putStrLn "Exp -> Exp '&' Exp" }
-    | Exp '||' Exp             { % liftIO $ putStrLn "Exp -> Exp '||' Exp" }
-    | Exp '&&' Exp             { % liftIO $ putStrLn "Exp -> Exp '&&' Exp " }
-    | Exp '>' Exp              { % liftIO $ putStrLn "Exp -> Exp '>' Exp" }
-    | Exp '<' Exp              { % liftIO $ putStrLn "Exp -> Exp '<' Exp" }
-    | Exp '>=' Exp             { % liftIO $ putStrLn "Exp -> Exp '>=' Exp" }
-    | Exp '<=' Exp             { % liftIO $ putStrLn "Exp -> Exp '<=' Exp" }
-    | Exp '==' Exp             { % liftIO $ putStrLn "Exp -> Exp '==' Exp " }
-    | Exp '/=' Exp             { % liftIO $ putStrLn "Exp -> Exp '/=' Exp" }
-    | '-' Exp %prec NEG        { % liftIO $ putStrLn "Exp -> '-' Exp %prec NEG" }
-    | '!' Exp                  { % liftIO $ putStrLn "Exp -> '!' Exp" }
-    | '~' Exp                  { % liftIO $ putStrLn "Exp -> '~' Exp" }
-    | Exp '?'                  { % liftIO $ putStrLn "Exp ->  Exp '?'" }
-    | '(' Exp ')'              { % liftIO $ putStrLn "Exp -> '(' Exp ')'" }
-    | Id                       { % liftIO $ putStrLn "Exp -> Id" }
-    | num                      { % liftIO $ putStrLn "Exp -> num" }
-    | true                     { % liftIO $ putStrLn "Exp -> true" }
-    | false                    { % liftIO $ putStrLn "Exp -> false" }
-    | str                      { % liftIO $ putStrLn "Exp -> str" }
-    | char                     { % liftIO $ putStrLn "Exp -> char" }
-    | List                     { % liftIO $ putStrLn "Exp -> List" }
-    | Arr                      { % liftIO $ putStrLn "Exp -> Arr" }
-    | Dict                     { % liftIO $ putStrLn "Exp -> Dict" }
-    | Tup                      { % liftIO $ putStrLn "Exp -> Tup" }
-    | FunCall                  { % liftIO $ putStrLn "Exp -> FunCall" }
+Exp : Exp '+' Exp              {   (ESum (SumOp $1 $3)) }
+    | Exp '-' Exp              {   (EDif (Dif $1 $3)) }
+    | Exp '*' Exp              {   (EMul (Mul $1 $3)) }
+    | Exp '/' Exp              {   (EDiv (Div $1 $3)) }
+    | Exp '%' Exp              {   (EMod (Mod $1 $3)) }
+    | Exp '**' Exp             {   (EPot (Pot $1 $3)) }
+    | Exp '//' Exp             {   (EDivE (DivE $1 $3)) }
+    | Exp '<<' Exp             {   (ELShift (LShift $1 $3)) }
+    | Exp '>>' Exp             {   (ERShift (RShift $1 $3)) }
+    | Exp '|' Exp              {   (EBitOr (BitOr $1 $3)) }
+    | Exp '^' Exp              {   (EBitXor (BitXor $1 $3)) }
+    | Exp '&' Exp              {   (EBitAnd (BitAnd $1 $3)) }
+    | Exp '||' Exp             {   (EOr (Or $1 $3)) }
+    | Exp '&&' Exp             {   (EAnd (And $1 $3)) }
+    | Exp '>' Exp              {   (EGreat (Great $1 $3)) }
+    | Exp '<' Exp              {   (ELess (Less $1 $3))}
+    | Exp '>=' Exp             {   (EGEq (GEq $1 $3)) }
+    | Exp '<=' Exp             {   (ELEq (LEq $1 $3)) }
+    | Exp '==' Exp             {   (EEqual (Equal $1 $3)) }
+    | Exp '/=' Exp             {   (ENEq (NEq $1 $3)) }
+    | '-' Exp %prec NEG        {   (ENeg $2) }
+    | '!' Exp                  {   (ENot $2) }
+    | '~' Exp                  {   (EBitNot $2) }
+    | '(' Exp ')'              {   $2 }
+    | Id                       {   EIdent $1 }
+    | num                      {   (EToken $1) }
+    | true                     {   (EToken $1) }
+    | false                    {   (EToken $1) }
+    | str                      {   (EToken $1) }
+    | char                     {   (EToken $1) }
+    | List                     {   $1 }
+    | Arr                      {   $1 }
+    | Dict                     {   $1 }
+    | Tup                      {   $1 }
+    | FunCall                  {   EFCall $1}
+    | Read                     {   $1 }
+    | Id '?'                   { ERef $1 }
 
-Exps : Exps ',' Exp            { % liftIO $ putStrLn "Exps -> Exps ',' Exp" }
-     | Exp                     { % liftIO $ putStrLn "Exps -> Exp" }
+Exps : Exps ',' Exp            {   ($3 : $1) }
+     | Exp                     {   [$1] }
 
-List : '[' Exps ']'            { % liftIO $ putStrLn "List -> '[' Exps ']'" }
-     | '[' ']'                 { % liftIO $ putStrLn "List -> '[' ']'" }
+List : '[' Exps ']'            {   (EList $2) }
+     | '[' ']'                 {   (EList []) }
 
-Arr : '{' Exps '}'             { % liftIO $ putStrLn "Arr -> '{' Exps '}'" }
-    | '{' '}'                  { % liftIO $ putStrLn "Arr -> '{' '}'" }
+Arr : '{' Exps '}'             {   (EArr $2) }
+    | '{' '}'                  {   (EArr []) }
 
-Dict : '[' KV ']'              { % liftIO $ putStrLn "Dict -> '[' KV ']'" }
+Dict : '[' KV ']'              {   (EDict $2) }
 
-KV : KV ',' Exp ':' Exp        { % liftIO $ putStrLn "KV -> KV ',' Exp ':' Exp" }
-   | Exp ':' Exp               { % liftIO $ putStrLn "Exp ':' Exp" }
+KV : KV ',' Exp ':' Exp        {   (($3,$5) : $1)}
+   | Exp ':' Exp               {   [($1,$3)] }
 
-Tup : '(' Exp ',' Exps ')'     { % liftIO $ putStrLn "Tup -> '(' Exp ',' Exps ')'" }
+Tup : '(' Exp ',' Exps ')'     {   (ETup ($2 : $4)) }
 
 -- Funciones
-FunCall : id '(' Exps ')'      {  % liftIO $ putStrLn "FunCall -> id '(' Exps ')'" }
-        | id '(' ')'           {  % liftIO $ putStrLn "FunCall -> id '(' ')'" }
+FunCall : id '(' Exps ')'      {    (FCall $1 $3)  }
+        | id '(' ')'           {    (FCall $1 []) }
 
-Function : func '(' Type Ret Exp ')' Block         { % liftIO $ putStrLn "Function -> func '(' Type Ret Exp ')' Block" }
-         | func '(' Type NoRet Exp ')' Block       { % liftIO $ putStrLn "Function -> func '(' Type NoRet Exp ')' Block" }
-         | func '(' '->' Type ')' id '(' ')' Block { % liftIO $ putStrLn "Function -> func '(' '->' Type ')' id '(' ')' Block" }
-         | func '(' ')' id '(' ')' Block           { % liftIO $ putStrLn "Function -> func '(' ')' id '(' ')' Block" }
+Function : func '(' Type Ret Exp ')' Block         {   Function }
+         | func '(' Type NoRet Exp ')' Block       {   Function }
+         | func '(' '->' Type ')' id '(' ')' Block {   Function }
+         | func '(' ')' id '(' ')' Block           {   Function }
 
-Ret : ',' Type Ret Exp ','     { % liftIO $ putStrLn "Ret -> ',' Type Ret Exp ','" }
-    | '->' Type ')' id '('     { % liftIO $ putStrLn "Ret -> '->' Type ')' id '('" }
+Ret : ',' Type Ret Exp ','     {    }
+    | '->' Type ')' id '('     {    }
 
-NoRet : '->' ',' Type NoRet Exp ',' { % liftIO $ putStrLn "NoRet -> '->' ',' Type NoRet Exp ','" }
-      | ')' id '('                  { % liftIO $ putStrLn "NoRet -> ')' id '('" }
+NoRet : '->' ',' Type NoRet Exp ',' {    }
+      | ')' id '('                  {    }
 
 -- Selectores
-Selector : If                  { % liftIO $ putStrLn "Selector -> If" }
-         | Case                { % liftIO $ putStrLn "Selector -> Case" }
+Selector : If                  { $1 }
+         | Case                { Det  }
 
-If : if Exp then In            { % liftIO $ putStrLn "If -> if Exp then In" }
-   | if Exp then In else In    { % liftIO $ putStrLn "If -> if Exp then In else In" }
+If : if Exp then In            {   (IfThen $2 $4) }
+   | if Exp then In else In    {   (IfElse $2 $4 $6) }
 
-Case : case Exp of Conds ';'   { % liftIO $ putStrLn "Case -> case Exp of Conds ';'" }
+Case : case Exp of Conds ';'   {    }
 
 -- Condiciones
-Conds : Conds Cond             { % liftIO $ putStrLn "Conds -> Conds Cond" }
-      | {- empty -}            { % liftIO $ putStrLn "Conds -> {- empty -}" }
+Conds : Conds Cond             {    }
+      | {- empty -}            {    }
 
-Cond : Exp In                  {  % liftIO $ putStrLn "Cond -> Exp In" }
+Cond : Exp In                  {     }
 
 -- Iteradores
-Iterator : Indet               { % liftIO $ putStrLn "Iterator -> Indet" }
-         | Det                 { % liftIO $ putStrLn "Iterator -> Det" }
+Iterator : Indet               { $1 }
+         | Det                 { Det }
 
-Indet : while Exp In           { % liftIO $ putStrLn "Indet -> while Exp In" }
+Indet : while Exp In           { (While $2 $3) }
 
-Det : for Type Id from Exp to Exp                     {  % liftIO $ putStrLn "Det -> for Type Id from Exp to Exp" }
-    | for Type Id from Exp to Exp if Exp In           {  % liftIO $ putStrLn "Det -> for Type Id from Exp to Exp if Exp In" }
-    | for Type Id from Exp to Exp with Exp if Exp In  {  % liftIO $ putStrLn "Det -> for Type Id from Exp to Exp with Exp if Exp In" }
-    | for Type Id from Exp to Exp with Exp In         {  % liftIO $ putStrLn "Det -> for Type Id from Exp to Exp with Exp In" }
-    | for Type Id in Exp if Exp In                    {  % liftIO $ putStrLn "Det -> for Type Id in Exp if Exp In" }
+Det : for Type Id from Exp to Exp                     {      }
+    | for Type Id from Exp to Exp if Exp In           {      }
+    | for Type Id from Exp to Exp with Exp if Exp In  {      }
+    | for Type Id from Exp to Exp with Exp In         {      }
+    | for Type Id in Exp if Exp In                    {      }
 
 {
-parseError [] = throwE "Unexpected ending."
-parseError _ = throwE "Unexpected token."
+parseError [] = throwE $ "Unexpected ending."
+parseError (t:_) = throwE $ "Unexpected token: " ++ show t
 }

@@ -7,6 +7,8 @@ import System.Console.GetOpt
 import Data.List
 import Parser
 import Control.Monad.Trans.Except
+import Control.Monad.Trans.State.Lazy
+import SymTable
 
 data Flag =
     Lexer  |
@@ -72,8 +74,6 @@ main = do
         else if Lexer `elem` opts
             then do
                 printTokList toks
-                p <- runExceptT $ parseDdr toks
-                reportRes p
             else do
-                p <- runExceptT $ parseDdr toks
+                (p,s) <- runStateT (runExceptT (parseDdr toks)) initialState
                 reportRes p
