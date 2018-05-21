@@ -156,7 +156,7 @@ Prods : Prods ',' Prod         {   }
 Prod : Type id                 {  }
 
 -- Identificadores
-Ids : Ids ',' id               { $3 : $1 }
+Ids : id ',' Ids               { $1 : $3 }
     | id                       { [$1] }
 
 Id : id                        { Variable $1  }
