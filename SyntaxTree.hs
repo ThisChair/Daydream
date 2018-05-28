@@ -18,8 +18,7 @@ data Instruction =
     Continue                               |
     Break                                  |
     Print Exp                              |
-    PrintLn Exp                            |
-    Function
+    PrintLn Exp
     deriving (Show)
 
 

@@ -4,6 +4,7 @@ import Lexer
 import Control.Monad.Trans.Except
 import SyntaxTree
 import SymTable
+import Control.Monad.Trans.State.Lazy
 import Control.Monad.IO.Class(liftIO)
 import Control.Monad.Trans.Class(lift)
 }
@@ -96,190 +97,198 @@ import Control.Monad.Trans.Class(lift)
 %%
 
 -- Inicio
-S : Mod Imports Body            { Init $1 $2 $3 }
+S : Mod Imports Body            { % return $ Init $1 $2 $3 }
 
-Mod : module type              { Module $2 }
-    | {- empty -}              { Main }
+Mod : module type              { % return $ Module $2 }
+    | {- empty -}              { % return $ Main }
 
 -- Importaciones
-Imports : Imports import type  { (Import $3) : $1 }
-        | {- empty -}          {   [] }
+Imports : Imports import type  { % return $ (Import $3) : $1 }
+        | {- empty -}          { % return $   [] }
 
 -- Instrucciones
-Body : Body In                  { $2 : $1 }
-     | Body Algebraic            { $1 }
-     | Body Declaration          { $1 }
-     | Body Function             { $2 : $1 }
-     | {- empty -}               { [] }
+Body : Body In                  { % return $ $2 : $1 }
+     | Body Algebraic            { % return $1 }
+     | Body Declaration          { % return $1 }
+     | Body Function             { % return $1 }
+     | {- empty -}               { % return [] }
 
-In : SingleI ';'               {   $1 }
-   | Selector                  {   $1 }
-   | Iterator                  {   $1 }
-   | Block                     { Block $1 }
+In : SingleI ';'               { % return $   $1 }
+   | Selector                  { % return $   $1 }
+   | Iterator                  { % return $   $1 }
+   | Block                     { % return $ Block $1 }
 
-SingleI : IDeclaration            { Assign $1 }
-        | Assign                  { Assign $1 }
-        | return Exp              { Ret $2 }
-        | Print                   { $1 }
-        | PrintLn                 { $1 }
-        | continue                { Continue }
-        | break                   { Break }
+SingleI : IDeclaration            { % return $ Assign $1 }
+        | Assign                  { % return $ Assign $1 }
+        | return Exp              { % return $ Ret $2 }
+        | Print                   { % return $ $1 }
+        | PrintLn                 { % return $ $1 }
+        | continue                { % return $ Continue }
+        | break                   { % return $ Break }
 
-Print : print '(' Exp ')'      { Print $3}
+Print : print '(' Exp ')'      { % return $ Print $3}
 
-PrintLn : printLn '(' Exp ')'  { PrintLn $3 }
+PrintLn : printLn '(' Exp ')'  { % return $ PrintLn $3 }
 
-Read : read '(' ')'            { Read }
+Read : read '(' ')'            { % return $ Read }
 
 -- Bloques
-Block : dream Body wake         { $2 }
+Block : BlockScope dream Body wake         { % lift $ popS >> (return $3) }
 
-Algebraic : data type dream Sums wake  { % lift $ pushS (StackEntry 1 False "")  }
+BlockScope : {- empty -}                    { % lift $ do {i <- getScopeNumber; 
+                                                          pushS (StackEntry i SBlock Nothing []);
+                                                          addNumber } }
 
-Sums : Sums Sum                {     }
-     | Sum                     {     }
+Algebraic : data type dream Sums wake  {  }
 
-Sum : type '(' Prods ')' ';'   {     }
-    | type '(' ')' ';'         {     }
+Sums : Sums Sum                { }
+     | Sum                     { }
 
-Declaration : Type Ids ';'     {     }
+Sum : type '(' Prods ')' ';'   { }
+    | type '(' ')' ';'         { }
 
-IDeclaration : Type DAssign { $2 }
+Declaration : Type Ids ';'     { }
+
+IDeclaration : Type DAssign { % return $ $2 }
 
 
-DAssign : id ',' DAssign ',' RV {   (( \(l,r) -> ((Variable $1):l,r++[$5]) ) $3)  }
-        | id '=' RV             {   ([Variable $1],[$3]) }
+DAssign : id ',' DAssign ',' RV { % return $   (( \(l,r) -> ((Variable $1):l,r++[$5]) ) $3)  }
+        | id '=' RV             { % return $   ([Variable $1],[$3]) }
 
-Prods : Prods ',' Prod         {   }
-      | Prod                   {   }
+Prods : Prods ',' Prod         { }
+      | Prod                   { }
 
-Prod : Type id                 {  }
+Prod : Type id                 { }
 
 -- Identificadores
-Ids : id ',' Ids               { $1 : $3 }
-    | id                       { [$1] }
+Ids : id ',' Ids               { % return $ $1 : $3 }
+    | id                       { % return $ [$1] }
 
-Id : id                        { Variable $1  }
-   | Id '[' Exp ']'            { Index $1 $3 }
-   | Id '.' MCall              { MemberCall $1 $3 }
+Id : id                        { % return $ Variable $1  }
+   | Id '[' Exp ']'            { % return $ Index $1 $3 }
+   | Id '.' MCall              { % return $ MemberCall $1 $3 }
 
-MCall : MCall '.' id           {   ($3 : $1) }
-      | id                     {   [$1] }
+MCall : MCall '.' id           { % return $   ($3 : $1) }
+      | id                     { % return $   [$1] }
 
-Types : Types ',' Type         {   ($3 : $1) }
-      | Type                   {   [$1] }
+Types : Types ',' Type         { % return $   ($3 : $1) }
+      | Type                   { % return $   [$1] }
 
-Type : type                    {   (Name $1) }
-     | '[' Type ']'            {   (List $2) }
-     | '{' Type ':' num '}'    {   (Array $2 $4) }
-     | '[' Type ':' Type ']'   {   (Dict ($2,$4)) }
-     | '(' Types ')'           {   (Tuple $2) }
+Type : type                    { % return $   (Name $1) }
+     | '[' Type ']'            { % return $   (List $2) }
+     | '{' Type ':' num '}'    { % return $   (Array $2 $4) }
+     | '[' Type ':' Type ']'   { % return $   (Dict ($2,$4)) }
+     | '(' Types ')'           { % return $   (Tuple $2) }
 
-Assign : Id ',' Assign ',' RV  {   (( \(l,r) -> ($1:l,r++[$5]) ) $3) }
-       | Id '=' RV             {   ([$1],[$3]) }
+Assign : Id ',' Assign ',' RV  { % return $   (( \(l,r) -> ($1:l,r++[$5]) ) $3) }
+       | Id '=' RV             { % return $   ([$1],[$3]) }
 
-RV : Exp    {   (ValueExp $1) }
-   | Cons   {   (ValueCons $1) }
+RV : Exp    { % return $   (ValueExp $1) }
+   | Cons   { % return $   (ValueCons $1) }
 
-Cons : type '(' ')'      {   (CCall $1 []) }
-     | type '(' Exps ')' {   (CCall $1 $3) }
+Cons : type '(' ')'      { % return $   (CCall $1 []) }
+     | type '(' Exps ')' { % return $   (CCall $1 $3) }
 
 -- Expresiones
-Exp : Exp '+' Exp              {   (ESum (SumOp $1 $3)) }
-    | Exp '-' Exp              {   (EDif (Dif $1 $3)) }
-    | Exp '*' Exp              {   (EMul (Mul $1 $3)) }
-    | Exp '/' Exp              {   (EDiv (Div $1 $3)) }
-    | Exp '%' Exp              {   (EMod (Mod $1 $3)) }
-    | Exp '**' Exp             {   (EPot (Pot $1 $3)) }
-    | Exp '//' Exp             {   (EDivE (DivE $1 $3)) }
-    | Exp '<<' Exp             {   (ELShift (LShift $1 $3)) }
-    | Exp '>>' Exp             {   (ERShift (RShift $1 $3)) }
-    | Exp '|' Exp              {   (EBitOr (BitOr $1 $3)) }
-    | Exp '^' Exp              {   (EBitXor (BitXor $1 $3)) }
-    | Exp '&' Exp              {   (EBitAnd (BitAnd $1 $3)) }
-    | Exp '||' Exp             {   (EOr (Or $1 $3)) }
-    | Exp '&&' Exp             {   (EAnd (And $1 $3)) }
-    | Exp '>' Exp              {   (EGreat (Great $1 $3)) }
-    | Exp '<' Exp              {   (ELess (Less $1 $3))}
-    | Exp '>=' Exp             {   (EGEq (GEq $1 $3)) }
-    | Exp '<=' Exp             {   (ELEq (LEq $1 $3)) }
-    | Exp '==' Exp             {   (EEqual (Equal $1 $3)) }
-    | Exp '/=' Exp             {   (ENEq (NEq $1 $3)) }
-    | '-' Exp %prec NEG        {   (ENeg $2) }
-    | '!' Exp                  {   (ENot $2) }
-    | '~' Exp                  {   (EBitNot $2) }
-    | '(' Exp ')'              {   $2 }
-    | Id                       {   EIdent $1 }
-    | num                      {   (EToken $1) }
-    | true                     {   (EToken $1) }
-    | false                    {   (EToken $1) }
-    | str                      {   (EToken $1) }
-    | char                     {   (EToken $1) }
-    | List                     {   $1 }
-    | Arr                      {   $1 }
-    | Dict                     {   $1 }
-    | Tup                      {   $1 }
-    | FunCall                  {   EFCall $1}
-    | Read                     {   $1 }
-    | Id '?'                   { ERef $1 }
+Exp : Exp '+' Exp              { % return $   (ESum (SumOp $1 $3)) }
+    | Exp '-' Exp              { % return $   (EDif (Dif $1 $3)) }
+    | Exp '*' Exp              { % return $   (EMul (Mul $1 $3)) }
+    | Exp '/' Exp              { % return $   (EDiv (Div $1 $3)) }
+    | Exp '%' Exp              { % return $   (EMod (Mod $1 $3)) }
+    | Exp '**' Exp             { % return $   (EPot (Pot $1 $3)) }
+    | Exp '//' Exp             { % return $   (EDivE (DivE $1 $3)) }
+    | Exp '<<' Exp             { % return $   (ELShift (LShift $1 $3)) }
+    | Exp '>>' Exp             { % return $   (ERShift (RShift $1 $3)) }
+    | Exp '|' Exp              { % return $   (EBitOr (BitOr $1 $3)) }
+    | Exp '^' Exp              { % return $   (EBitXor (BitXor $1 $3)) }
+    | Exp '&' Exp              { % return $   (EBitAnd (BitAnd $1 $3)) }
+    | Exp '||' Exp             { % return $   (EOr (Or $1 $3)) }
+    | Exp '&&' Exp             { % return $   (EAnd (And $1 $3)) }
+    | Exp '>' Exp              { % return $   (EGreat (Great $1 $3)) }
+    | Exp '<' Exp              { % return $   (ELess (Less $1 $3))}
+    | Exp '>=' Exp             { % return $   (EGEq (GEq $1 $3)) }
+    | Exp '<=' Exp             { % return $   (ELEq (LEq $1 $3)) }
+    | Exp '==' Exp             { % return $   (EEqual (Equal $1 $3)) }
+    | Exp '/=' Exp             { % return $   (ENEq (NEq $1 $3)) }
+    | '-' Exp %prec NEG        { % return $   (ENeg $2) }
+    | '!' Exp                  { % return $   (ENot $2) }
+    | '~' Exp                  { % return $   (EBitNot $2) }
+    | '(' Exp ')'              { % return $   $2 }
+    | Id                       { % return $   EIdent $1 }
+    | num                      { % return $   (EToken $1) }
+    | true                     { % return $   (EToken $1) }
+    | false                    { % return $   (EToken $1) }
+    | str                      { % return $   (EToken $1) }
+    | char                     { % return $   (EToken $1) }
+    | List                     { % return $   $1 }
+    | Arr                      { % return $   $1 }
+    | Dict                     { % return $   $1 }
+    | Tup                      { % return $   $1 }
+    | FunCall                  { % return $   EFCall $1}
+    | Read                     { % return $   $1 }
+    | Id '?'                   { % return $ ERef $1 }
 
-Exps : Exps ',' Exp            {   ($3 : $1) }
-     | Exp                     {   [$1] }
+Exps : Exps ',' Exp            { % return $   ($3 : $1) }
+     | Exp                     { % return $   [$1] }
 
-List : '[' Exps ']'            {   (EList $2) }
-     | '[' ']'                 {   (EList []) }
+List : '[' Exps ']'            { % return $   (EList $2) }
+     | '[' ']'                 { % return $   (EList []) }
 
-Arr : '{' Exps '}'             {   (EArr $2) }
-    | '{' '}'                  {   (EArr []) }
+Arr : '{' Exps '}'             { % return $   (EArr $2) }
+    | '{' '}'                  { % return $   (EArr []) }
 
-Dict : '[' KV ']'              {   (EDict $2) }
+Dict : '[' KV ']'              { % return $   (EDict $2) }
 
-KV : KV ',' Exp ':' Exp        {   (($3,$5) : $1)}
-   | Exp ':' Exp               {   [($1,$3)] }
+KV : KV ',' Exp ':' Exp        { % return $   (($3,$5) : $1)}
+   | Exp ':' Exp               { % return $   [($1,$3)] }
 
-Tup : '(' Exp ',' Exps ')'     {   (ETup ($2 : $4)) }
+Tup : '(' Exp ',' Exps ')'     { % return $   (ETup ($2 : $4)) }
 
 -- Funciones
-FunCall : id '(' Exps ')'      {    (FCall $1 $3)  }
-        | id '(' ')'           {    (FCall $1 []) }
+FunCall : id '(' Exps ')'      { % return $    (FCall $1 $3)  }
+        | id '(' ')'           { % return $    (FCall $1 []) }
 
-Function : func '(' Type Ret Exp ')' Block         {   Function }
-         | func '(' Type NoRet Exp ')' Block       {   Function }
-         | func '(' '->' Type ')' id '(' ')' Block {   Function }
-         | func '(' ')' id '(' ')' Block           {   Function }
+Function : func '(' Type Ret Exp ')' Block         {  }
+         | func '(' Type NoRet Exp ')' Block       {  }
+         | func '(' '->' Type ')' id '(' ')' Block {  }
+         | func '(' ')' id '(' ')' Block           {  }
 
-Ret : ',' Type Ret Exp ','     {    }
-    | '->' Type ')' id '('     {    }
+Ret : ',' Type Ret Exp ','     { }
+    | '->' Type ')' id '('     { }
 
-NoRet : '->' ',' Type NoRet Exp ',' {    }
-      | ')' id '('                  {    }
+NoRet : '->' ',' Type NoRet Exp ',' { }
+      | ')' id '('                  { }
 
 -- Selectores
-Selector : If                  { $1 }
-         | Case                { Det  }
+Selector : If                  { % return $ $1 }
+         | Case                { % return $ Det  }
 
-If : if Exp then In            {   (IfThen $2 $4) }
-   | if Exp then In else In    {   (IfElse $2 $4 $6) }
+If : if Exp then In            { % return $   (IfThen $2 $4) }
+   | if Exp then In else In    { % return $   (IfElse $2 $4 $6) }
 
-Case : case Exp of Conds ';'   {    }
+Case : case Exp of Conds ';'   { }
 
 -- Condiciones
-Conds : Conds Cond             {    }
-      | {- empty -}            {    }
+Conds : Conds Cond             { }
+      | {- empty -}            { }
 
-Cond : Exp In                  {     }
+Cond : Exp In                  { }
 
 -- Iteradores
-Iterator : Indet               { $1 }
-         | Det                 { Det }
+Iterator : Indet               { % return $ $1 }
+         | Det                 { % return $ Det }
 
-Indet : while Exp In           { (While $2 $3) }
+Indet : while Exp In           { % return $ (While $2 $3) }
 
-Det : for Type Id from Exp to Exp                     {      }
-    | for Type Id from Exp to Exp if Exp In           {      }
-    | for Type Id from Exp to Exp with Exp if Exp In  {      }
-    | for Type Id from Exp to Exp with Exp In         {      }
-    | for Type Id in Exp if Exp In                    {      }
+Det : ForScope for Type id from Exp to Exp                     { }
+    | ForScope for Type id from Exp to Exp if Exp In           { }
+    | ForScope for Type id from Exp to Exp with Exp if Exp In  { }
+    | ForScope for Type id from Exp to Exp with Exp In         { }
+    | ForScope for Type id in Exp if Exp In                    { }
+
+ForScope : {- empty -}                     { % lift $ do {i <- getScopeNumber; 
+                                                          pushS (StackEntry i SFor Nothing []);
+                                                          addNumber } }
 
 {
 parseError [] = throwE $ "Unexpected ending."
