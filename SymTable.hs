@@ -3,6 +3,7 @@ import Data.Map as M
 import Prelude as P
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
+import Control.Monad.Trans.Class(lift)
 
 type SymTable = Map String (Map Integer SymScope)    -- Tabla de simbolos, una tabla de hash de listas de alcances, indexadas por nombre.
 
@@ -11,7 +12,7 @@ data SymScope = SymScope { category :: Category    -- Representacion de un alcan
                          , typeS    :: (String,Integer)
                          , otherS   :: [(String,Integer)]  } deriving (Show, Eq)
 
-data Category = CFunc | CVar | CType | CParam | CField | CCons deriving (Show, Eq)
+data Category = CFunc | CVar | CType | CParam | CField | CCons | CFor deriving (Show, Eq)
 
 insertSym :: String -> SymScope -> SymTable -> SymTable
 insertSym elem elemScope table = 
@@ -21,6 +22,26 @@ insertSym elem elemScope table =
 
 insertSym' :: (String,SymScope) -> SymTable -> SymTable
 insertSym' (elem,elemScope) table = insertSym elem elemScope table
+
+lookupTable' :: String -> ScopeStack -> Maybe SymScope
+lookupTable' elem (table,stack,_) = lookupTable elem table stack
+
+lookupTable :: String -> SymTable -> Stack -> Maybe SymScope
+lookupTable elem table stack = checkChain stack chain
+    where 
+        chain = M.lookup elem table
+
+checkChain :: Stack -> Maybe (Map Integer SymScope) -> Maybe SymScope
+checkChain stack Nothing = Nothing
+checkChain stack (Just chain) = case (M.lookup 0 chain) of 
+    (Just x) -> Just x
+    Nothing -> (\x -> if (x /= []) then (snd . head) x else Nothing) $ M.toList $ M.filter (/=Nothing) $ M.map (checkScopeInStack stack ) chain
+
+checkScopeInStack :: Stack -> SymScope -> Maybe SymScope
+checkScopeInStack [] _ = Nothing
+checkScopeInStack stack entry 
+ | scope entry == ((actualScope . head)  stack) = Just entry
+ | otherwise = checkScopeInStack (pop stack) entry
 
 type ScopeStack = (SymTable,Stack,Integer)
 
@@ -69,7 +90,7 @@ scopeOne = [
     ]
 
 initialSymTable :: SymTable
-initialSymTable = P.foldr insertSym' M.empty scopeZero
+initialSymTable = P.foldr insertSym' M.empty (scopeZero ++ scopeOne)
 
 modifySymTable :: (SymTable -> SymTable) -> ScopeStack -> ScopeStack
 modifySymTable f (sym,st,i) = (f sym,st,i)
@@ -85,6 +106,11 @@ getScopeNumber = do
     (_,_,i) <- get
     return i
 
+getActualScope :: Monad m => StateT ScopeStack m Integer
+getActualScope = do
+    (_,(s:_),_) <- get
+    return (actualScope s)
+
 addNumber :: Monad m => StateT ScopeStack m ()
 addNumber = modify addScopeNumber
 
@@ -96,3 +122,24 @@ popS = modify $ modifyStack $ pop
 
 insertSymS :: Monad m => String -> SymScope -> StateT ScopeStack m ()
 insertSymS elem elemScope = modify . modifySymTable $ insertSym elem elemScope
+
+searchTable :: String -> ParseMonad (String,Integer)
+searchTable id = do
+    ss <- lift get
+    case (lookupTable' id ss) of
+        Just sym -> return (id,scope sym)
+        Nothing -> throwE $ "Undeclared symbol: " ++ id
+
+isPervasive :: String -> ScopeStack -> Bool
+isPervasive id (sym,_,_) = case search of
+            Just _ -> True
+            Nothing -> False
+    where
+        search = M.lookup id sym >>= (\x -> M.lookup 0 x)
+
+pervasiveCheck :: String -> ParseMonad ()
+pervasiveCheck s = do
+    ss <- lift get
+    if (isPervasive s ss) 
+        then (throwE $ "Can't redefine: " ++ s) 
+        else return ()

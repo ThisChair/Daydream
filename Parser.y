@@ -139,32 +139,53 @@ BlockScope : {- empty -}                    { % lift $ do {i <- getScopeNumber;
                                                           pushS (StackEntry i SBlock Nothing []);
                                                           addNumber } }
 
-Algebraic : data type dream Sums wake  {  }
+Algebraic : AlgScope data type dream Sums wake  { % lift $ do{i <- getActualScope;
+                                                              popS;
+                                                              j <- getActualScope;
+                                                              insertSymS (tokenVal $3) (SymScope CType j ("Type",0) [("",i)]); }  }
+
+AlgScope : {- empty -}         { % lift $ do {i <- getScopeNumber; 
+                                              pushS (StackEntry i SType Nothing []);
+                                              addNumber } }
 
 Sums : Sums Sum                { }
      | Sum                     { }
 
-Sum : type '(' Prods ')' ';'   { }
-    | type '(' ')' ';'         { }
+Sum : ConsScope type '(' Prods ')' ';'   { % lift $do{i <- getActualScope; popS;
+                                                      j <- getActualScope;
+                                                      insertSymS (tokenVal $2) (SymScope CCons j ("Type",0) [("",i)]); } }
+    | ConsScope type '(' ')' ';'         { % lift  popS }
 
-Declaration : Type Ids ';'     { }
+ConsScope : {- empty -}      { % lift $ do {i <- getScopeNumber; 
+                                            pushS (StackEntry i SCons Nothing []);
+                                            addNumber } }
 
-IDeclaration : Type DAssign { % return $ $2 }
+Declaration : Type Ids ';'     { % do { (mapM_ pervasiveCheck (map tokenVal $2));
+                                        i <- lift getScopeNumber;
+                                        t <- searchTable (typeString $1);
+                                        lift $ mapM_ (\x -> insertSymS x (SymScope CVar i t [])) (map tokenVal $2); } }
+
+IDeclaration : Type DAssign { % do { mapM_ pervasiveCheck (map idString (fst $2));
+                                     t <- searchTable (typeString $1);
+                                     lift $ mapM_ (\(Variable (x,y)) -> insertSymS x (SymScope CVar y t [])) (fst $2);
+                                     return $2 } }
 
 
-DAssign : id ',' DAssign ',' RV { % return $   (( \(l,r) -> ((Variable $1):l,r++[$5]) ) $3)  }
-        | id '=' RV             { % return $   ([Variable $1],[$3]) }
+DAssign : id ',' DAssign ',' RV { % do{ i <- lift getActualScope; return (( \(l,r) -> ((Variable (tokenVal $1,i)):l,r++[$5]) ) $3)} }
+        | id '=' RV             { % do{ i <- lift getActualScope; return ([Variable (tokenVal $1,i)],[$3]) } }
 
 Prods : Prods ',' Prod         { }
       | Prod                   { }
 
-Prod : Type id                 { }
+Prod : Type id                 { %  do{i <- lift getScopeNumber;
+                                       t <- searchTable (typeString $1);
+                                       lift $ insertSymS (tokenVal $2) (SymScope CField i t []); } }
 
 -- Identificadores
 Ids : id ',' Ids               { % return $ $1 : $3 }
     | id                       { % return $ [$1] }
 
-Id : id                        { % return $ Variable $1  }
+Id : id                        { % do{ s <- searchTable (tokenVal $1);  return $ Variable s; }  }
    | Id '[' Exp ']'            { % return $ Index $1 $3 }
    | Id '.' MCall              { % return $ MemberCall $1 $3 }
 
@@ -174,7 +195,7 @@ MCall : MCall '.' id           { % return $   ($3 : $1) }
 Types : Types ',' Type         { % return $   ($3 : $1) }
       | Type                   { % return $   [$1] }
 
-Type : type                    { % return $   (Name $1) }
+Type : type                    { % return $   (Name (tokenVal $1)) }
      | '[' Type ']'            { % return $   (List $2) }
      | '{' Type ':' num '}'    { % return $   (Array $2 $4) }
      | '[' Type ':' Type ']'   { % return $   (Dict ($2,$4)) }
@@ -248,20 +269,47 @@ Tup : '(' Exp ',' Exps ')'     { % return $   (ETup ($2 : $4)) }
 FunCall : id '(' Exps ')'      { % return $    (FCall $1 $3)  }
         | id '(' ')'           { % return $    (FCall $1 []) }
 
-Function : func '(' Type Ret Exp ')' Block         {  }
-         | func '(' Type NoRet Exp ')' Block       {  }
-         | func '(' '->' Type ')' id '(' ')' Block {  }
-         | func '(' ')' id '(' ')' Block           {  }
+Function : FuncScope func '('ParRet ')' Block         { % lift $ do { popS;
+                                                                      i <- getActualScope; 
+                                                                      (\((_,_),(_,n)) -> 
+                                                                          insertSymS (tokenVal n) (SymScope CFunc i ("_tuple",0) [])) $4; } }
+         | FuncScope func '(' ParNoRet ')' Block       {  % lift $ do { popS;
+                                                                      i <- getActualScope; 
+                                                                      (\((_,_),(_,n)) -> 
+                                                                          insertSymS (tokenVal n) (SymScope CFunc i ("_tuple",0) [])) $4; } }
+         | FuncScope func '(' '->' Types ')' id '(' ')' Block {  }
+         | FuncScope func '(' ')' id '(' ')' Block           {  }
 
-Ret : ',' Type Ret Exp ','     { }
-    | '->' Type ')' id '('     { }
+FuncScope : {- empty -}                    { % lift $ do {i <- getScopeNumber; 
+                                                          pushS (StackEntry i SFunc Nothing []);
+                                                          addNumber } }
 
-NoRet : '->' ',' Type NoRet Exp ',' { }
-      | ')' id '('                  { }
+ParRet : Type Ret id          { % do { i <- lift getActualScope;
+                                       l <- return ((\((x,y),(z,n)) -> (($1 : x,$3 : y ),(z,n))) $2); 
+                                       t <- mapM searchTable (map typeString (fst $ fst l));
+                                       mapM_ pervasiveCheck (map tokenVal (snd $ fst l));
+                                       mapM_ searchTable (map typeString (fst $ snd l));
+                                       lift $ mapM_ (\(x,y) -> insertSymS y (SymScope CParam i x [])) (zip t (map tokenVal (snd $ fst l)));
+                                       return l; } }
+
+ParNoRet : Type NoRet id    { % do { i <- lift getActualScope;
+                                     l <- return ((\((x,y),(_,n)) -> 
+                                         (($1 : x,$3 : y ),([],n))) $2); 
+                                     t <- mapM searchTable (map typeString (fst $ fst l));
+                                     mapM_ pervasiveCheck (map tokenVal (snd $ fst l));
+                                     lift $ mapM_ (\(x,y) -> 
+                                         insertSymS y (SymScope CParam i x [])) (zip t (map tokenVal (snd $ fst l)));
+                                     return l; } }
+
+Ret : ',' Type Ret id ','     { % return $ (\((x,y),(z,n)) -> (($2 : x,$4 : y ),(z,n))) $3  }
+    | '->' Types ')' id '('     { % return (([],[]),($2,$4)) }
+
+NoRet : ',' Type NoRet id ',' { % return $ (\((x,y),(_,n)) -> (($2 : x,$4 : y),([],n))) $3 }
+      | ')' id '('                  { % return (([],[]),([],$2)) }
 
 -- Selectores
 Selector : If                  { % return $ $1 }
-         | Case                { % return $ Det  }
+         | Case                { % return $ Block [] }
 
 If : if Exp then In            { % return $   (IfThen $2 $4) }
    | if Exp then In else In    { % return $   (IfElse $2 $4 $6) }
@@ -276,15 +324,19 @@ Cond : Exp In                  { }
 
 -- Iteradores
 Iterator : Indet               { % return $ $1 }
-         | Det                 { % return $ Det }
+         | Det                 { % return $ Det $1 }
 
 Indet : while Exp In           { % return $ (While $2 $3) }
 
-Det : ForScope for Type id from Exp to Exp                     { }
-    | ForScope for Type id from Exp to Exp if Exp In           { }
-    | ForScope for Type id from Exp to Exp with Exp if Exp In  { }
-    | ForScope for Type id from Exp to Exp with Exp In         { }
-    | ForScope for Type id in Exp if Exp In                    { }
+Det : ForScope for ForDec from Exp to Exp In                  { % lift $ popS >> (return $ FromTo $5 $7 $8)}
+    | ForScope for ForDec from Exp to Exp if Exp In           { % lift $ popS >> (return $ FromToIf $5 $7 $9 $10)}
+    | ForScope for ForDec from Exp to Exp with Exp if Exp In  { % lift $ popS >> (return $ FromToWithIf $5 $7 $9 $11 $12)}
+    | ForScope for ForDec from Exp to Exp with Exp In         { % lift $ popS >> (return $ FromToWith $5 $7 $9 $10)}
+    | ForScope for ForDec in Exp if Exp In                    { % lift $ popS >> (return $ InIf $5 $7 $8)}
+
+ForDec : Type id                         {% do {i <- lift getActualScope;
+                                                t <- searchTable (typeString $1);
+                                                lift $ insertSymS (tokenVal $2) (SymScope CFor i t []); } }
 
 ForScope : {- empty -}                     { % lift $ do {i <- getScopeNumber; 
                                                           pushS (StackEntry i SFor Nothing []);

@@ -13,7 +13,7 @@ data Instruction =
     IfThen Exp Instruction                 |
     IfElse Exp Instruction Instruction     |
     While Exp Instruction                  |
-    Det                                    |
+    Det For                                |
     Ret Exp                                |
     Continue                               |
     Break                                  |
@@ -21,6 +21,13 @@ data Instruction =
     PrintLn Exp
     deriving (Show)
 
+data For = 
+    FromTo       Exp Exp Instruction         |
+    FromToIf     Exp Exp Exp Instruction     |
+    FromToWithIf Exp Exp Exp Exp Instruction |
+    FromToWith   Exp Exp Exp Instruction     |
+    InIf         Exp Exp Instruction
+    deriving (Show)
 
 data Member = Member TypeName Token deriving (Show)
 
@@ -35,19 +42,28 @@ data CCall = CCall Token [Exp] deriving (Show)
 
 data DataType = DataType Token [Constructor] deriving (Show)
 
+typeString :: TypeName -> String
+typeString (Name  s) = s
+typeString (List  _) = "_list"
+typeString (Array _ _) = "_array"
+typeString (Tuple _) = "_tuple"
+typeString (Dict  _) = "_dict"
 
 data TypeName = 
-    Name Token               |
+    Name String              |
     Array TypeName Token     |
     List TypeName            |
     Tuple [TypeName]         |
     Dict (TypeName,TypeName) 
     deriving (Show)
 
+idString :: Identifier -> String
+idString (Variable (s,_)) = s
+_ = error $ "No variable"
 
 data Identifier = 
-    Variable Token               |
-    Index Identifier Exp       |
+    Variable (String,Integer)    |
+    Index Identifier Exp         |
     MemberCall Identifier [Token]
     deriving (Show) 
 

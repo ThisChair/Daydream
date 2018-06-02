@@ -13,12 +13,14 @@ import SymTable
 data Flag =
     Lexer  |
     Parser |
+    Table  |
     Help
     deriving (Eq,Ord,Enum,Show,Bounded)
 
 flags =
     [Option ['l'] ["lexer"]  (NoArg Lexer)  "Runs only the lexical analyzer and prints the token list."
     ,Option ['p'] ["parser"] (NoArg Parser) "Runs the syntax analyzer and prints the syntax tree."
+    ,Option ['t'] ["table"]  (NoArg Table)  "Runs the syntax analyzer and prints the symtable."
     ,Option ['h'] ["help"]   (NoArg Help)   "Prints this help message."
     ]
 
@@ -61,6 +63,10 @@ reportRes :: Either String a -> IO ()
 reportRes (Left e) = putStrLn ("Error: " ++ show e)
 reportRes (Right _) = putStrLn ""
 
+reportRes' :: Show a => Either String a -> IO ()
+reportRes' (Left e) = putStrLn ("Error: " ++ show e)
+reportRes' (Right t) = putStrLn (show t)
+
 main::IO ()
 main = do
     (opts,file) <- getArgs >>= parse
@@ -75,5 +81,13 @@ main = do
             then do
                 printTokList toks
             else do
-                (p,s) <- runStateT (runExceptT (parseDdr toks)) initialState
-                reportRes p
+                (p,(s,_,_)) <- runStateT (runExceptT (parseDdr toks)) initialState
+                if Parser `elem` opts
+                    then reportRes' p
+                    else do
+                        reportRes p
+                        if Table `elem` opts
+                            then putStrLn $ show s
+                            else putStrLn ""
+                
+                
