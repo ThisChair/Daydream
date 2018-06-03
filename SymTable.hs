@@ -1,5 +1,6 @@
 module SymTable where
 import Data.Map as M
+import Data.List as L
 import Prelude as P
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
@@ -35,13 +36,11 @@ checkChain :: Stack -> Maybe (Map Integer SymScope) -> Maybe SymScope
 checkChain stack Nothing = Nothing
 checkChain stack (Just chain) = case (M.lookup 0 chain) of 
     (Just x) -> Just x
-    Nothing -> (\x -> if (x /= []) then (snd . head) x else Nothing) $ M.toList $ M.filter (/=Nothing) $ M.map (checkScopeInStack stack ) chain
-
-checkScopeInStack :: Stack -> SymScope -> Maybe SymScope
-checkScopeInStack [] _ = Nothing
-checkScopeInStack stack entry 
- | scope entry == ((actualScope . head)  stack) = Just entry
- | otherwise = checkScopeInStack (pop stack) entry
+    Nothing -> search filtered_stack
+        where
+            filtered_stack = L.filter (\x -> elem (actualScope x) (keys chain)) stack 
+            search [] = Nothing
+            search l  = M.lookup ((actualScope . head) filtered_stack) chain
 
 type ScopeStack = (SymTable,Stack,Integer)
 
