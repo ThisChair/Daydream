@@ -58,11 +58,15 @@ data TypeName =
     deriving (Show)
 
 idString :: Identifier -> String
-idString (Variable (s,_)) = s
-_ = error $ "No variable"
+idString (Variable (s,_,_)) = s
+idString _ = error $ "No variable"
+
+idPos :: Identifier -> AlexPosn
+idPos (Variable (_,_,p)) = p
+idPos _ = error $ "No variable"
 
 data Identifier = 
-    Variable (String,Integer)    |
+    Variable (String,Integer,AlexPosn)    |
     Index Identifier Exp         |
     MemberCall Identifier [Token]
     deriving (Show) 

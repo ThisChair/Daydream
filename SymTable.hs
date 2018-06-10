@@ -4,13 +4,15 @@ import Prelude as P
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Class(lift)
+import Lexer
 
 type SymTable = Map String (Map Integer SymScope)    -- Tabla de simbolos, una tabla de hash de listas de alcances, indexadas por nombre.
 
 data SymScope = SymScope { category :: Category    -- Representacion de un alcance particular.
                          , scope    :: Integer
                          , typeS    :: (String,Integer)
-                         , otherS   :: [(String,Integer)]  } deriving (Show, Eq)
+                         , otherS   :: [(String,Integer)]
+                         , pos      :: AlexPosn  } deriving (Show, Eq)
 
 data Category = CFunc | CVar | CType | CParam | CField | CCons | CFor deriving (Show, Eq)
 
@@ -66,27 +68,30 @@ push x xs = x:xs
 initialState :: ScopeStack
 initialState = (initialSymTable, [StackEntry 2 SGlobal Nothing [], StackEntry 1 SGlobal Nothing []],5)
 
+noPos :: AlexPosn
+noPos = AlexPn 0 0 0
+
 scopeZero :: [(String,SymScope)]
 scopeZero = [
-    ("Type",  (SymScope CType 0 ("Type",0) [])),
-    ("Unit",  (SymScope CType 0 ("Type",0) [])),
-    ("Int",   (SymScope CType 0 ("Type",0) [])),
-    ("Float", (SymScope CType 0 ("Type",0) [])),
-    ("Char",  (SymScope CType 0 ("Type",0) [])),
-    ("String",(SymScope CType 0 ("Type",0) [])),
-    ("Bool",  (SymScope CType 0 ("Type",0) [])),
-    ("_list", (SymScope CType 0 ("Type",0) [])),
-    ("_tuple",(SymScope CType 0 ("Type",0) [])),
-    ("_array",(SymScope CType 0 ("Type",0) [])),
-    ("_dict", (SymScope CType 0 ("Type",0) [])),
-    ("_ptr",  (SymScope CType 0 ("Type",0) []))
+    ("Type",  (SymScope CType 0 ("Type",0) [] noPos)),
+    ("Unit",  (SymScope CType 0 ("Type",0) [] noPos)),
+    ("Int",   (SymScope CType 0 ("Type",0) [] noPos)),
+    ("Float", (SymScope CType 0 ("Type",0) [] noPos)),
+    ("Char",  (SymScope CType 0 ("Type",0) [] noPos)),
+    ("String",(SymScope CType 0 ("Type",0) [] noPos)),
+    ("Bool",  (SymScope CType 0 ("Type",0) [] noPos)),
+    ("_list", (SymScope CType 0 ("Type",0) [] noPos)),
+    ("_tuple",(SymScope CType 0 ("Type",0) [] noPos)),
+    ("_array",(SymScope CType 0 ("Type",0) [] noPos)),
+    ("_dict", (SymScope CType 0 ("Type",0) [] noPos)),
+    ("_ptr",  (SymScope CType 0 ("Type",0) [] noPos))
     ]
 scopeOne :: [(String,SymScope)]
 scopeOne = [
-    ("malloc", (SymScope CFunc  1 ("Unit",0) [("size",2)])),
-    ("size",   (SymScope CParam 3 ("Int",0) [])),
-    ("free",   (SymScope CFunc  1 ("Unit",0) [("ptr",3)])),
-    ("ptr",    (SymScope CParam 4 ("_ptr",0) []))
+    ("malloc", (SymScope CFunc  1 ("Unit",0) [("size",2)] noPos)),
+    ("size",   (SymScope CParam 3 ("Int",0) [] noPos)),
+    ("free",   (SymScope CFunc  1 ("Unit",0) [("ptr",3)] noPos)),
+    ("ptr",    (SymScope CParam 4 ("_ptr",0) [] noPos))
     ]
 
 initialSymTable :: SymTable
@@ -123,12 +128,20 @@ popS = modify $ modifyStack $ pop
 insertSymS :: Monad m => String -> SymScope -> StateT ScopeStack m ()
 insertSymS elem elemScope = modify . modifySymTable $ insertSym elem elemScope
 
-searchTable :: String -> ParseMonad (String,Integer)
+searchTable :: String -> ParseMonad (String,Integer,AlexPosn)
 searchTable id = do
     ss <- lift get
     case (lookupTable' id ss) of
-        Just sym -> return (id,scope sym)
+        Just sym -> return (id,scope sym, pos sym)
         Nothing -> throwE $ "Undeclared symbol: " ++ id
+
+
+searchType :: String -> ParseMonad (String,Integer)
+searchType id = do
+    ss <- lift get
+    case (lookupTable' id ss) of
+        Just sym -> return (id,scope sym)
+        Nothing -> throwE $ "Unexistent type: " ++ id
 
 isPervasive :: String -> ScopeStack -> Bool
 isPervasive id (sym,_,_) = case search of

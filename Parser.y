@@ -142,7 +142,9 @@ BlockScope : {- empty -}                    { % lift $ do {i <- getScopeNumber;
 Algebraic : AlgScope data type dream Sums wake  { % lift $ do{i <- getActualScope;
                                                               popS;
                                                               j <- getActualScope;
-                                                              insertSymS (tokenVal $3) (SymScope CType j ("Type",0) [("",i)]); }  }
+                                                              insertSymS (tokenVal $3) (SymScope CType j ("Type",0) [("",i)] (tokenPos $3)); 
+                                                             }  
+                                                }
 
 AlgScope : {- empty -}         { % lift $ do {i <- getScopeNumber; 
                                               pushS (StackEntry i SType Nothing []);
@@ -153,7 +155,9 @@ Sums : Sums Sum                { }
 
 Sum : ConsScope type '(' Prods ')' ';'   { % lift $do{i <- getActualScope; popS;
                                                       j <- getActualScope;
-                                                      insertSymS (tokenVal $2) (SymScope CCons j ("Type",0) [("",i)]); } }
+                                                      insertSymS (tokenVal $2) (SymScope CCons j ("Type",0) [("",i)] (tokenPos $3)); 
+                                                     } 
+                                         }
     | ConsScope type '(' ')' ';'         { % lift  popS }
 
 ConsScope : {- empty -}      { % lift $ do {i <- getScopeNumber; 
@@ -162,30 +166,35 @@ ConsScope : {- empty -}      { % lift $ do {i <- getScopeNumber;
 
 Declaration : Type Ids ';'     { % do { (mapM_ pervasiveCheck (map tokenVal $2));
                                         i <- lift getScopeNumber;
-                                        t <- searchTable (typeString $1);
-                                        lift $ mapM_ (\x -> insertSymS x (SymScope CVar i t [])) (map tokenVal $2); } }
+                                        t <- searchType (typeString $1);
+                                        lift $ mapM_ (\x -> insertSymS (tokenVal x) (SymScope CVar i t [] (tokenPos x))) $2; 
+                                      } 
+                               }
 
 IDeclaration : Type DAssign { % do { mapM_ pervasiveCheck (map idString (fst $2));
-                                     t <- searchTable (typeString $1);
-                                     lift $ mapM_ (\(Variable (x,y)) -> insertSymS x (SymScope CVar y t [])) (fst $2);
+                                     t <- searchType (typeString $1);
+                                     lift $ mapM_ (\(Variable (x,y,z)) -> insertSymS x (SymScope CVar y t [] z)) (fst $2);
                                      return $2 } }
 
 
-DAssign : id ',' DAssign ',' RV { % do{ i <- lift getActualScope; return (( \(l,r) -> ((Variable (tokenVal $1,i)):l,r++[$5]) ) $3)} }
-        | id '=' RV             { % do{ i <- lift getActualScope; return ([Variable (tokenVal $1,i)],[$3]) } }
+DAssign : id ',' DAssign ',' RV { % do{ i <- lift getActualScope;
+                                        return (( \(l,r) -> ((Variable (tokenVal $1,i,tokenPos $1)):l,r++[$5]) ) $3)
+                                      } 
+                                }
+        | id '=' RV             { % do{ i <- lift getActualScope; return ([Variable (tokenVal $1,i,tokenPos $1)],[$3]) } }
 
 Prods : Prods ',' Prod         { }
       | Prod                   { }
 
 Prod : Type id                 { %  do{i <- lift getScopeNumber;
-                                       t <- searchTable (typeString $1);
-                                       lift $ insertSymS (tokenVal $2) (SymScope CField i t []); } }
+                                       t <- searchType (typeString $1);
+                                       lift $ insertSymS (tokenVal $2) (SymScope CField i t [] (tokenPos $2)); } }
 
 -- Identificadores
 Ids : id ',' Ids               { % return $ $1 : $3 }
     | id                       { % return $ [$1] }
 
-Id : id                        { % do{ s <- searchTable (tokenVal $1);  return $ Variable s; }  }
+Id : id                        { % do{ s <- searchTable (tokenVal $1);  return $ (Variable s); }  }
    | Id '[' Exp ']'            { % return $ Index $1 $3 }
    | Id '.' MCall              { % return $ MemberCall $1 $3 }
 
@@ -269,14 +278,18 @@ Tup : '(' Exp ',' Exps ')'     { % return $   (ETup ($2 : $4)) }
 FunCall : id '(' Exps ')'      { % return $    (FCall $1 $3)  }
         | id '(' ')'           { % return $    (FCall $1 []) }
 
-Function : FuncScope func '('ParRet ')' Block         { % lift $ do { popS;
-                                                                      i <- getActualScope; 
-                                                                      (\((_,_),(_,n)) -> 
-                                                                          insertSymS (tokenVal n) (SymScope CFunc i ("_tuple",0) [])) $4; } }
-         | FuncScope func '(' ParNoRet ')' Block       {  % lift $ do { popS;
-                                                                      i <- getActualScope; 
-                                                                      (\((_,_),(_,n)) -> 
-                                                                          insertSymS (tokenVal n) (SymScope CFunc i ("_tuple",0) [])) $4; } }
+Function : FuncScope func '('ParRet ')' Block { % lift $ do { popS;
+                                                              i <- getActualScope; 
+                                                              (\((_,_),(_,n)) -> 
+                                                                  insertSymS (tokenVal n) (SymScope CFunc i ("_tuple",0) [] (tokenPos n))) $4; 
+                                                            }
+                                              }
+         | FuncScope func '(' ParNoRet ')' Block {  % lift $ do { popS;
+                                                                i <- getActualScope; 
+                                                                (\((_,_),(_,n)) -> 
+                                                                    insertSymS (tokenVal n) (SymScope CFunc i ("_tuple",0) [] (tokenPos n))) $4; 
+                                                                } 
+                                                 }
          | FuncScope func '(' '->' Types ')' id '(' ')' Block {  }
          | FuncScope func '(' ')' id '(' ')' Block           {  }
 
@@ -286,19 +299,20 @@ FuncScope : {- empty -}                    { % lift $ do {i <- getScopeNumber;
 
 ParRet : Type Ret id          { % do { i <- lift getActualScope;
                                        l <- return ((\((x,y),(z,n)) -> (($1 : x,$3 : y ),(z,n))) $2); 
-                                       t <- mapM searchTable (map typeString (fst $ fst l));
+                                       t <- mapM searchType (map typeString (fst $ fst l));
                                        mapM_ pervasiveCheck (map tokenVal (snd $ fst l));
                                        mapM_ searchTable (map typeString (fst $ snd l));
-                                       lift $ mapM_ (\(x,y) -> insertSymS y (SymScope CParam i x [])) (zip t (map tokenVal (snd $ fst l)));
+                                       lift $ mapM_ (\(x,y) -> 
+                                           insertSymS (tokenVal y) (SymScope CParam i x [] (tokenPos y))) (zip t (snd $ fst l));
                                        return l; } }
 
 ParNoRet : Type NoRet id    { % do { i <- lift getActualScope;
                                      l <- return ((\((x,y),(_,n)) -> 
                                          (($1 : x,$3 : y ),([],n))) $2); 
-                                     t <- mapM searchTable (map typeString (fst $ fst l));
+                                     t <- mapM searchType (map typeString (fst $ fst l));
                                      mapM_ pervasiveCheck (map tokenVal (snd $ fst l));
                                      lift $ mapM_ (\(x,y) -> 
-                                         insertSymS y (SymScope CParam i x [])) (zip t (map tokenVal (snd $ fst l)));
+                                         insertSymS (tokenVal y) (SymScope CParam i x [] (tokenPos y))) (zip t (snd $ fst l));
                                      return l; } }
 
 Ret : ',' Type Ret id ','     { % return $ (\((x,y),(z,n)) -> (($2 : x,$4 : y ),(z,n))) $3  }
@@ -335,8 +349,8 @@ Det : ForScope for ForDec from Exp to Exp In                  { % lift $ popS >>
     | ForScope for ForDec in Exp if Exp In                    { % lift $ popS >> (return $ InIf $5 $7 $8)}
 
 ForDec : Type id                         {% do {i <- lift getActualScope;
-                                                t <- searchTable (typeString $1);
-                                                lift $ insertSymS (tokenVal $2) (SymScope CFor i t []); } }
+                                                t <- searchType (typeString $1);
+                                                lift $ insertSymS (tokenVal $2) (SymScope CFor i t [] (tokenPos $2)); } }
 
 ForScope : {- empty -}                     { % lift $ do {i <- getScopeNumber; 
                                                           pushS (StackEntry i SFor Nothing []);
