@@ -4,18 +4,42 @@ import Data.List as L
 import Prelude as P
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
+import Control.Monad.Trans.Writer.Lazy
 import Control.Monad.Trans.Class(lift)
 import Lexer
+import SyntaxTree
 
 type SymTable = Map String (Map Integer SymScope)    -- Tabla de simbolos, una tabla de hash de listas de alcances, indexadas por nombre.
 
-data SymScope = SymScope { category :: Category    -- Representacion de un alcance particular.
-                         , scope    :: Integer
-                         , typeS    :: (String,Integer)
+data SymScope = SymScope { scope    :: Integer
+                         , typeS    :: (Type,Integer)
                          , otherS   :: [(String,Integer)]
                          , pos      :: AlexPosn  } deriving (Show, Eq)
 
-data Category = CFunc | CVar | CType | CParam | CField | CCons | CFor deriving (Show, Eq)
+data Type = TypeInt                |
+            TypeFloat              |
+            TypeBool               |
+            TypeChar               |
+            TypeString             |
+            TypeVoid               |
+            TypeError              |
+            TypeType               |
+            TypeArray Type String  |
+            TypeList Type          |
+            TypeDict Type Type     |
+            TypeTuple [Type]       |
+            TypeFunc [Type] [Type] |
+            TypePointer Type       |
+            TypeData String
+            deriving (Show,Eq)
+
+readType :: String -> Type
+readType "Int" = TypeInt
+readType "Float" = TypeFloat
+readType "Bool" = TypeBool
+readType "Char" = TypeChar
+readType "String" = TypeString
+readType s = TypeData s
 
 insertSym :: String -> SymScope -> SymTable -> SymTable
 insertSym elem elemScope table = 
@@ -46,7 +70,7 @@ checkChain stack (Just chain) = case (M.lookup 0 chain) of
 
 type ScopeStack = (SymTable,Stack,Integer)
 
-type ParseMonad = ExceptT String (StateT ScopeStack IO)
+type ParseMonad = ExceptT String (StateT ScopeStack (WriterT [String] IO))
 
 type Stack = [StackEntry]
 
@@ -72,25 +96,25 @@ noPos = AlexPn 0 0 0
 
 scopeZero :: [(String,SymScope)]
 scopeZero = [
-    ("Type",  (SymScope CType 0 ("Type",0) [] noPos)),
-    ("Unit",  (SymScope CType 0 ("Type",0) [] noPos)),
-    ("Int",   (SymScope CType 0 ("Type",0) [] noPos)),
-    ("Float", (SymScope CType 0 ("Type",0) [] noPos)),
-    ("Char",  (SymScope CType 0 ("Type",0) [] noPos)),
-    ("String",(SymScope CType 0 ("Type",0) [] noPos)),
-    ("Bool",  (SymScope CType 0 ("Type",0) [] noPos)),
-    ("_list", (SymScope CType 0 ("Type",0) [] noPos)),
-    ("_tuple",(SymScope CType 0 ("Type",0) [] noPos)),
-    ("_array",(SymScope CType 0 ("Type",0) [] noPos)),
-    ("_dict", (SymScope CType 0 ("Type",0) [] noPos)),
-    ("_ptr",  (SymScope CType 0 ("Type",0) [] noPos))
+    ("Type",  (SymScope 0 (TypeType,0) [] noPos)),
+    ("Unit",  (SymScope 0 (TypeType,0) [] noPos)),
+    ("Int",   (SymScope 0 (TypeType,0) [] noPos)),
+    ("Float", (SymScope 0 (TypeType,0) [] noPos)),
+    ("Char",  (SymScope 0 (TypeType,0) [] noPos)),
+    ("String",(SymScope 0 (TypeType,0) [] noPos)),
+    ("Bool",  (SymScope 0 (TypeType,0) [] noPos)),
+    ("_list", (SymScope 0 (TypeType,0) [] noPos)),
+    ("_tuple",(SymScope 0 (TypeType,0) [] noPos)),
+    ("_array",(SymScope 0 (TypeType,0) [] noPos)),
+    ("_dict", (SymScope 0 (TypeType,0) [] noPos)),
+    ("_ptr",  (SymScope 0 (TypeType,0) [] noPos))
     ]
 scopeOne :: [(String,SymScope)]
 scopeOne = [
-    ("malloc", (SymScope CFunc  1 ("Unit",0) [("size",2)] noPos)),
-    ("size",   (SymScope CParam 3 ("Int",0) [] noPos)),
-    ("free",   (SymScope CFunc  1 ("Unit",0) [("ptr",3)] noPos)),
-    ("ptr",    (SymScope CParam 4 ("_ptr",0) [] noPos))
+    ("malloc", (SymScope 1 (TypeFunc [TypeInt] [TypePointer TypeInt],0) [("size",2)] noPos)),
+    ("size",   (SymScope 3 (TypeInt,0) [] noPos)),
+    ("free",   (SymScope 1 (TypeFunc [TypePointer TypeInt] [],0) [("ptr",3)] noPos)),
+    ("ptr",    (SymScope 4 (TypePointer TypeInt,0) [] noPos))
     ]
 
 initialSymTable :: SymTable
@@ -132,15 +156,36 @@ searchTable id = do
     ss <- lift get
     case (lookupTable' id ss) of
         Just sym -> return (id,scope sym, pos sym)
-        Nothing -> throwE $ "Undeclared symbol: " ++ id
+        Nothing -> do
+            lift $ lift $ tell $ ["Undeclared symbol: " ++ id]
+            return (id,-1, noPos)
 
+getType :: TypeName -> ParseMonad (Type,Integer)
+getType (Name s) = do
+    (t,scope) <- searchType s
+    return (readType t,scope)
+getType (List tn) = do
+    (t,_) <- getType tn
+    return (TypeList t,0)
+getType (Array tn n) = do
+    (t,_) <- getType tn
+    return (TypeArray t (tokenVal n),0)
+getType (Tuple tns) = do
+    ts <- mapM getType tns
+    return (TypeTuple (P.map fst ts),0)
+getType (Dict (k,v)) = do
+    (tk,_) <- getType k
+    (tv,_) <- getType v
+    return (TypeDict tk tv,0)
 
 searchType :: String -> ParseMonad (String,Integer)
 searchType id = do
     ss <- lift get
     case (lookupTable' id ss) of
         Just sym -> return (id,scope sym)
-        Nothing -> throwE $ "Unexistent type: " ++ id
+        Nothing -> do
+            lift $ lift $ tell $ ["Unexistent type: " ++ id]
+            return (id,-1)
 
 isPervasive :: String -> ScopeStack -> Bool
 isPervasive id (sym,_,_) = case search of
@@ -153,5 +198,7 @@ pervasiveCheck :: String -> ParseMonad ()
 pervasiveCheck s = do
     ss <- lift get
     if (isPervasive s ss) 
-        then (throwE $ "Can't redefine: " ++ s) 
+        then (lift $ lift $ tell $ ["Can't redefine: " ++ s]) 
         else return ()
+
+

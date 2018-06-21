@@ -8,6 +8,7 @@ import Data.List
 import Parser
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
+import Control.Monad.Trans.Writer.Lazy
 import SymTable
 
 data Flag =
@@ -81,11 +82,14 @@ main = do
             then do
                 printTokList toks
             else do
-                (p,(s,_,_)) <- runStateT (runExceptT (parseDdr toks)) initialState
+                ((p,(s,_,_)),w) <- runWriterT (runStateT (runExceptT (parseDdr toks)) initialState)
                 if Parser `elem` opts
-                    then reportRes' p
+                    then do
+                        reportRes' p
+                        mapM_ putStrLn $ map show w
                     else do
                         reportRes p
+                        mapM_ putStrLn $ map show w
                         if Table `elem` opts
                             then putStrLn $ show s
                             else putStrLn ""
