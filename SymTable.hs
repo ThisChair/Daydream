@@ -16,23 +16,6 @@ data SymScope = SymScope { scope    :: Integer
                          , otherS   :: [(String,Integer)]
                          , pos      :: AlexPosn  } deriving (Show, Eq)
 
-data Type = TypeInt                |
-            TypeFloat              |
-            TypeBool               |
-            TypeChar               |
-            TypeString             |
-            TypeVoid               |
-            TypeError              |
-            TypeType               |
-            TypeArray Type String  |
-            TypeList Type          |
-            TypeDict Type Type     |
-            TypeTuple [Type]       |
-            TypeFunc [Type] [Type] |
-            TypePointer Type       |
-            TypeData String
-            deriving (Show,Eq)
-
 readType :: String -> Type
 readType "Int" = TypeInt
 readType "Float" = TypeFloat
@@ -161,19 +144,19 @@ searchTable id = do
             return (id,-1, noPos)
 
 getType :: TypeName -> ParseMonad (Type,Integer)
-getType (Name s) = do
+getType (Name _ s) = do
     (t,scope) <- searchType s
     return (readType t,scope)
-getType (List tn) = do
+getType (List _ tn) = do
     (t,_) <- getType tn
     return (TypeList t,0)
-getType (Array tn n) = do
+getType (Array _ tn n) = do
     (t,_) <- getType tn
     return (TypeArray t (tokenVal n),0)
-getType (Tuple tns) = do
+getType (Tuple _ tns) = do
     ts <- mapM getType tns
     return (TypeTuple (P.map fst ts),0)
-getType (Dict (k,v)) = do
+getType (Dict _ (k,v)) = do
     (tk,_) <- getType k
     (tv,_) <- getType v
     return (TypeDict tk tv,0)
@@ -201,4 +184,92 @@ pervasiveCheck s = do
         then (lift $ lift $ tell $ ["Can't redefine: " ++ s]) 
         else return ()
 
+-- Funciones para retorno de tipos -- 
 
+-- Init 
+returnTypeInit :: Init -> Type
+returnTypeInit (Init t _ _ _) = t
+
+-- Module
+returnTypeModule :: Module -> Type
+returnTypeModule (Module t _) = t 
+returnTypeModule (Main t) = t
+
+-- Import
+returnTypeImport :: Import -> Type
+returnTypeImport (Import t _) = t
+
+-- Instruction
+returnTypeInstruction :: Instruction -> Type
+returnTypeInstruction (Block t _) = t
+returnTypeInstruction (Assign t _) = t
+returnTypeInstruction (IfThen t _ _) = t
+returnTypeInstruction (IfElse t _ _ _) = t 
+returnTypeInstruction (While t _ _) = t 
+returnTypeInstruction (Det t _) = t 
+returnTypeInstruction (Ret t _) = t 
+returnTypeInstruction (Continue t) = t 
+returnTypeInstruction (Break t) = t 
+returnTypeInstruction (Print t _) = t 
+returnTypeInstruction (PrintLn t _) = t
+
+-- For
+returnTypeFor :: For -> Type
+returnTypeFor (FromTo t _ _ _) = t
+returnTypeFor (FromToIf t _ _ _ _) = t
+returnTypeFor (FromToWithIf t _ _ _ _ _) = t
+returnTypeFor (FromToWith t _ _ _ _) = t
+returnTypeFor (InIf t _ _ _) = t
+
+-- TypeName
+returnTypeTypeName :: TypeName -> Type
+returnTypeTypeName (Name t _) = t
+returnTypeTypeName (Array t _ _) = t
+returnTypeTypeName (List t _) = t
+returnTypeTypeName (Tuple t  _) = t
+returnTypeTypeName (Dict t _) = t
+
+-- Identifier
+returnTypeIdentifier :: Identifier -> Type
+returnTypeIdentifier (Variable t _) = t
+returnTypeIdentifier (Index t _ _) = t
+returnTypeIdentifier (MemberCall t _ _) = t
+
+-- Exp
+returnTypeExp :: Exp -> Type
+returnTypeExp (ESum t _ _ ) = t
+returnTypeExp (EDif t _ _ ) = t
+returnTypeExp (EMul t _ _ ) = t
+returnTypeExp (EDiv t _ _ ) = t
+returnTypeExp (EMod t _ _ ) = t
+returnTypeExp (EPot t _ _ ) = t
+returnTypeExp (EDivE t _ _ ) = t
+returnTypeExp (ELShift t _ _ ) = t
+returnTypeExp (ERShift t _ _ ) = t
+returnTypeExp (EBitOr t _ _ ) = t
+returnTypeExp (EBitAnd t _ _ ) = t
+returnTypeExp (EBitXor t _ _ ) = t
+returnTypeExp (EOr t _ _ ) = t
+returnTypeExp (EAnd t _ _ ) = t
+returnTypeExp (EGEq t _ _ ) = t
+returnTypeExp (EGreat t _ _ ) = t
+returnTypeExp (ELEq t _ _ ) = t
+returnTypeExp (ELess t _ _ ) = t
+returnTypeExp (ENEq t _ _ ) = t
+returnTypeExp (EEqual t _ _ ) = t
+returnTypeExp (ENeg t _ ) = t
+returnTypeExp (ENot t _ ) = t
+returnTypeExp (EBitNot t _ ) = t 
+returnTypeExp (EFCall t _ ) = t
+returnTypeExp (EToken t _ ) = t
+returnTypeExp (EList t _ ) = t
+returnTypeExp (EArr t _ ) = t
+returnTypeExp (EDict t _ ) = t
+returnTypeExp (ETup t _ ) = t
+returnTypeExp (EIdent t _ ) = t
+returnTypeExp (Read t ) = t
+returnTypeExp (ERef t _ ) = t
+
+-- FCall
+returnTypeFCall :: FCall -> Type
+returnTypeFCall (FCall t _ _) = t

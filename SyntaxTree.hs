@@ -1,32 +1,32 @@
 module SyntaxTree where
 import Lexer
 
-data Init = Init Module [Import] [Instruction] deriving (Show)
+data Init = Init Type Module [Import] [Instruction] deriving (Show)
 
-data Module = Module Token | Main deriving (Show)
+data Module = Module Type Token | Main Type deriving (Show)
 
-data Import = Import Token deriving (Show)
+data Import = Import Type Token deriving (Show)
 
 data Instruction = 
-    Block [Instruction]                    |
-    Assign ([Identifier],[RightValue])     |
-    IfThen Exp Instruction                 |
-    IfElse Exp Instruction Instruction     |
-    While Exp Instruction                  |
-    Det For                                |
-    Ret Exp                                |
-    Continue                               |
-    Break                                  |
-    Print Exp                              |
-    PrintLn Exp
+    Block Type [Instruction]                |
+    Assign Type ([Identifier],[RightValue]) |
+    IfThen Type Exp Instruction             |
+    IfElse Type Exp Instruction Instruction |
+    While Type Exp Instruction              |
+    Det Type For                            |
+    Ret Type Exp                            |
+    Continue Type                           |
+    Break Type                              |
+    Print Type Exp                          |
+    PrintLn Type Exp
     deriving (Show)
 
 data For = 
-    FromTo       Exp Exp Instruction         |
-    FromToIf     Exp Exp Exp Instruction     |
-    FromToWithIf Exp Exp Exp Exp Instruction |
-    FromToWith   Exp Exp Exp Instruction     |
-    InIf         Exp Exp Instruction
+    FromTo       Type Exp Exp Instruction         |
+    FromToIf     Type Exp Exp Exp Instruction     |
+    FromToWithIf Type Exp Exp Exp Exp Instruction |
+    FromToWith   Type Exp Exp Exp Instruction     |
+    InIf         Type Exp Exp Instruction
     deriving (Show)
 
 data Member = Member TypeName Token deriving (Show)
@@ -43,88 +43,84 @@ data CCall = CCall Token [Exp] deriving (Show)
 data DataType = DataType Token [Constructor] deriving (Show)
 
 typeString :: TypeName -> String
-typeString (Name  s) = s
-typeString (List  _) = "_list"
-typeString (Array _ _) = "_array"
-typeString (Tuple _) = "_tuple"
-typeString (Dict  _) = "_dict"
+typeString (Name _ s) = s
+typeString (List _ _) = "_list"
+typeString (Array _ _ _) = "_array"
+typeString (Tuple _ _) = "_tuple"
+typeString (Dict _ _) = "_dict"
 
 data TypeName = 
-    Name String              |
-    Array TypeName Token     |
-    List TypeName            |
-    Tuple [TypeName]         |
-    Dict (TypeName,TypeName) 
+    Name Type String              |
+    Array Type TypeName Token     |
+    List Type TypeName            |
+    Tuple Type [TypeName]         |
+    Dict Type (TypeName,TypeName) 
     deriving (Show)
 
 idString :: Identifier -> String
-idString (Variable (s,_,_)) = s
+idString (Variable _ (s,_,_)) = s
 idString _ = error $ "No variable"
 
 idPos :: Identifier -> AlexPosn
-idPos (Variable (_,_,p)) = p
+idPos (Variable _ (_,_,p)) = p
 idPos _ = error $ "No variable"
 
 data Identifier = 
-    Variable (String,Integer,AlexPosn)    |
-    Index Identifier Exp         |
-    MemberCall Identifier [Token]
+    Variable Type (String,Integer,AlexPosn) |
+    Index Type Identifier Exp               |
+    MemberCall Type Identifier [Token]
     deriving (Show) 
 
 data Exp = 
-    ESum    SumOp     |
-    EDif    Dif       |
-    EMul    Mul       |
-    EDiv    Div       |
-    EMod    Mod       |
-    EPot    Pot       |
-    EDivE   DivE      |
-    ELShift LShift   |
-    ERShift RShift   |
-    EBitOr  BitOr     |
-    EBitAnd BitAnd   |
-    EBitXor BitXor   |
-    EOr     Or        |
-    EAnd    And       |
-    EGEq    GEq       |
-    EGreat  Great     |
-    ELEq    LEq       |
-    ELess   Less      |
-    ENEq    NEq       |
-    EEqual  Equal     |
-    ENeg    Exp |
-    ENot    Exp |
-    EBitNot Exp |
-    EFCall  FCall     |
-    EToken  Token     |
-    EList   [Exp] |
-    EArr    [Exp] |
-    EDict   [(Exp,Exp)] |
-    ETup    [Exp] |
-    EIdent  Identifier |
-    Read |
-    ERef Identifier
+    ESum    Type Exp Exp     |
+    EDif    Type Exp Exp     |
+    EMul    Type Exp Exp     |
+    EDiv    Type Exp Exp     |
+    EMod    Type Exp Exp     |
+    EPot    Type Exp Exp     |
+    EDivE   Type Exp Exp     |
+    ELShift Type Exp Exp     |
+    ERShift Type Exp Exp     |
+    EBitOr  Type Exp Exp     |
+    EBitAnd Type Exp Exp     |
+    EBitXor Type Exp Exp     |
+    EOr     Type Exp Exp     |
+    EAnd    Type Exp Exp     |
+    EGEq    Type Exp Exp     |
+    EGreat  Type Exp Exp     |
+    ELEq    Type Exp Exp     |
+    ELess   Type Exp Exp     |
+    ENEq    Type Exp Exp     |
+    EEqual  Type Exp Exp     |
+    ENeg    Type Exp         |
+    ENot    Type Exp         |
+    EBitNot Type Exp         |
+    EFCall  Type FCall       |
+    EToken  Type Token       |
+    EList   Type [Exp]       |
+    EArr    Type [Exp]       |
+    EDict   Type [(Exp,Exp)] |
+    ETup    Type [Exp]       |
+    EIdent  Type Identifier  |
+    Read    Type             |
+    ERef    Type Identifier
     deriving (Show)
 
-data SumOp    = SumOp   Exp Exp   deriving (Show)
-data Dif    = Dif   Exp Exp   deriving (Show)
-data Mul    = Mul   Exp Exp   deriving (Show)
-data Div    = Div   Exp Exp   deriving (Show)
-data Mod    = Mod   Exp Exp   deriving (Show)
-data DivE   = DivE  Exp Exp   deriving (Show)
-data Pot    = Pot   Exp Exp   deriving (Show)
-data LShift = LShift Exp Exp deriving (Show)
-data RShift = RShift Exp Exp deriving (Show)
-data BitOr = BitOr Exp Exp deriving (Show)
-data BitAnd = BitAnd Exp Exp deriving (Show)
-data BitXor = BitXor Exp Exp deriving (Show)
-data Or     = Or    Exp Exp   deriving (Show)
-data And    = And   Exp Exp   deriving (Show)
-data GEq    = GEq   Exp Exp   deriving (Show)
-data Great     = Great    Exp Exp   deriving (Show)
-data LEq    = LEq   Exp Exp   deriving (Show)
-data Less   = Less  Exp Exp   deriving (Show)
-data NEq    = NEq   Exp Exp   deriving (Show)
-data Equal = Equal Exp Exp deriving (Show)
+data FCall = FCall Type Token [Exp] deriving (Show)
 
-data FCall = FCall Token [Exp] deriving (Show)
+data Type = TypeInt                |
+            TypeFloat              |
+            TypeBool               |
+            TypeChar               |
+            TypeString             |
+            TypeVoid               |
+            TypeError              |
+            TypeType               |
+            TypeArray Type String  |
+            TypeList Type          |
+            TypeDict Type Type     |
+            TypeTuple [Type]       |
+            TypeFunc [Type] [Type] |
+            TypePointer Type       |
+            TypeData String
+            deriving (Show,Eq)
