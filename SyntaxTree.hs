@@ -1,6 +1,9 @@
 module SyntaxTree where
 import Lexer
 
+class AST a where
+    returnType :: a -> Type
+
 data Init = Init Type Module [Import] [Instruction] deriving (Show)
 
 data Module = Module Type Token | Main Type deriving (Show)
@@ -124,3 +127,93 @@ data Type = TypeInt                |
             TypePointer Type       |
             TypeData String
             deriving (Show,Eq)
+
+-- Funciones para retorno de tipos -- 
+
+-- Init 
+instance AST Init where
+    returnType (Init t _ _ _) = t
+
+-- Module
+instance AST Module where
+    returnType (Module t _) = t 
+    returnType (Main t) = t
+
+-- Import
+instance AST Import where
+    returnType (Import t _) = t
+
+-- Instruction
+instance AST Instruction where
+    returnType (Block t _) = t
+    returnType (Assign t _) = t
+    returnType (IfThen t _ _) = t
+    returnType (IfElse t _ _ _) = t 
+    returnType (While t _ _) = t 
+    returnType (Det t _) = t 
+    returnType (Ret t _) = t 
+    returnType (Continue t) = t 
+    returnType (Break t) = t 
+    returnType (Print t _) = t 
+    returnType (PrintLn t _) = t
+
+-- For
+instance AST For where
+    returnType (FromTo t _ _ _) = t
+    returnType (FromToIf t _ _ _ _) = t
+    returnType (FromToWithIf t _ _ _ _ _) = t
+    returnType (FromToWith t _ _ _ _) = t
+    returnType (InIf t _ _ _) = t
+
+-- TypeName
+instance AST TypeName where
+    returnType (Name t _) = t
+    returnType (Array t _ _) = t
+    returnType (List t _) = t
+    returnType (Tuple t  _) = t
+    returnType (Dict t _) = t
+
+-- Identifier
+instance AST Identifier where
+    returnType (Variable t _) = t
+    returnType (Index t _ _) = t
+    returnType (MemberCall t _ _) = t
+
+-- Exp
+instance AST Exp where
+    returnType (ESum t _ _ ) = t
+    returnType (EDif t _ _ ) = t
+    returnType (EMul t _ _ ) = t
+    returnType (EDiv t _ _ ) = t
+    returnType (EMod t _ _ ) = t
+    returnType (EPot t _ _ ) = t
+    returnType (EDivE t _ _ ) = t
+    returnType (ELShift t _ _ ) = t
+    returnType (ERShift t _ _ ) = t
+    returnType (EBitOr t _ _ ) = t
+    returnType (EBitAnd t _ _ ) = t
+    returnType (EBitXor t _ _ ) = t
+    returnType (EOr t _ _ ) = t
+    returnType (EAnd t _ _ ) = t
+    returnType (EGEq t _ _ ) = t
+    returnType (EGreat t _ _ ) = t
+    returnType (ELEq t _ _ ) = t
+    returnType (ELess t _ _ ) = t
+    returnType (ENEq t _ _ ) = t
+    returnType (EEqual t _ _ ) = t
+    returnType (ENeg t _ ) = t
+    returnType (ENot t _ ) = t
+    returnType (EBitNot t _ ) = t 
+    returnType (EFCall t _ ) = t
+    returnType (EToken t _ ) = t
+    returnType (EList t _ ) = t
+    returnType (EArr t _ ) = t
+    returnType (EDict t _ ) = t
+    returnType (ETup t _ ) = t
+    returnType (EIdent t _ ) = t
+    returnType (Read t ) = t
+    returnType (ERef t _ ) = t
+
+-- FCall
+instance AST FCall where
+    returnType (FCall t _ _) = t

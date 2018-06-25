@@ -7,6 +7,7 @@ import SymTable
 import Control.Monad.Trans.State.Strict
 import Control.Monad.IO.Class(liftIO)
 import Control.Monad.Trans.Class(lift)
+import Control.Monad(zipWithM_)
 }
 %monad { ParseMonad }
 %name parseDdr
@@ -139,12 +140,14 @@ BlockScope : {- empty -}                    { % lift $ do {i <- getScopeNumber;
                                                           pushS (StackEntry i SBlock Nothing []);
                                                           addNumber } }
 
-Algebraic : AlgScope data type dream Sums wake  { % pervasiveCheck (tokenVal $3) >> 
-                                                              (lift $ do{i <- getActualScope;
-                                                              popS;
-                                                              j <- getActualScope;
-                                                              insertSymS (tokenVal $3) (SymScope j (TypeType,0) [("",i)] (tokenPos $3)); 
-                                                             })
+Algebraic : AlgScope data type dream Sums wake  { % do  {
+                                                            pervasiveCheck (tokenVal $3) (tokenPos $3);
+                                                            i <- lift getActualScope;
+                                                            lift popS;
+                                                            j <- lift getActualScope;
+                                                            redeclaredCheck (tokenVal $3) j (tokenPos $3);
+                                                            lift $ insertSymS (tokenVal $3) (SymScope j (TypeType,0) [("",i)] (tokenPos $3)); 
+                                                        }
                                                 }
 
 AlgScope : {- empty -}         { % lift $ do {i <- getScopeNumber; 
@@ -154,10 +157,14 @@ AlgScope : {- empty -}         { % lift $ do {i <- getScopeNumber;
 Sums : Sums Sum                { }
      | Sum                     { }
 
-Sum : ConsScope type '(' Prods ')' ';'   { % lift $do{i <- getActualScope; popS;
-                                                      j <- getActualScope;
-                                                      insertSymS (tokenVal $2) (SymScope j (TypeType,0) [("",i)] (tokenPos $3)); 
-                                                     } 
+Sum : ConsScope type '(' Prods ')' ';'   { % do{
+                                                    pervasiveCheck (tokenVal $2) (tokenPos $2);
+                                                    i <- lift getActualScope;
+                                                    lift popS;
+                                                    j <- lift getActualScope;
+                                                    redeclaredCheck (tokenVal $2) j (tokenPos $2);
+                                                    lift $ insertSymS (tokenVal $2) (SymScope j (TypeType,0) [("",i)] (tokenPos $3)); 
+                                               } 
                                          }
     | ConsScope type '(' ')' ';'         { % lift  popS }
 
@@ -165,17 +172,22 @@ ConsScope : {- empty -}        { % lift $ do {i <- getScopeNumber;
                                             pushS (StackEntry i SCons Nothing []);
                                             addNumber } }
 
-Declaration : Type Ids ';'     { % do { (mapM_ pervasiveCheck (map tokenVal $2));
+Declaration : Type Ids ';'     { % do { (zipWithM_ pervasiveCheck (map tokenVal $2) (map tokenPos $2));
                                         i <- lift getActualScope;
+                                        zipWith3M_ redeclaredCheck (map tokenVal $2) (repeat i) (map tokenPos $2);
                                         t <- getType $1;
                                         lift $ mapM_ (\x -> insertSymS (tokenVal x) (SymScope i t [] (tokenPos x))) (reverse $2); 
                                       } 
                                }
 
-IDeclaration : Type DAssign { % do { mapM_ pervasiveCheck (map idString (fst $2));
+IDeclaration : Type DAssign { % do { zipWithM_ pervasiveCheck (map idString (fst $2)) (map idPos (fst $2));
                                      t <- getType $1;
-                                     lift $ mapM_ (\(Variable TypeError (x,y,z)) -> insertSymS x (SymScope y t [] z)) (fst $2);
-                                     return (fst $2, reverse (snd $2)) } }
+                                     mapM_ (\(Variable TypeError (x,y,z)) -> 
+                                                redeclaredCheck x y z >>                                                
+                                                (lift $ insertSymS x (SymScope y t [] z))) (fst $2);
+                                     return (fst $2, reverse (snd $2)) 
+                                   }
+                            }
 
 
 DAssign : id ',' DAssign ',' RV { % do{ i <- lift getActualScope;
@@ -187,17 +199,25 @@ DAssign : id ',' DAssign ',' RV { % do{ i <- lift getActualScope;
 Prods : Prods ',' Prod         { }
       | Prod                   { }
 
-Prod : Type id                 { %  do{i <- lift getActualScope;
-                                       t <- getType $1;
-                                       lift $ insertSymS (tokenVal $2) (SymScope i t [] (tokenPos $2)); } }
+Prod : Type id                 { %  do{
+                                        pervasiveCheck (tokenVal $2) (tokenPos $2);                                        
+                                        i <- lift getActualScope;
+                                        redeclaredCheck (tokenVal $2) i (tokenPos $2);
+                                        t <- getType $1;
+                                        lift $ insertSymS (tokenVal $2) (SymScope i t [] (tokenPos $2));
+                                       }
+                               }
 
 -- Identificadores
 Ids : id ',' Ids               { % return $ $1 : $3 }
     | id                       { % return $ [$1] }
 
-Id : id                        { % do{ s <- searchTable (tokenVal $1);
-                                       i <- lift getActualScope;
-                                       return $ (Variable TypeError s); }  }
+Id : id                        { % do{ 
+                                        (s,t) <- searchTable' (tokenVal $1);
+                                        i <- lift getActualScope;
+                                        return $ (Variable t s); 
+                                     }
+                               }
    | Id '[' Exp ']'            { % return $ Index TypeError $1 $3 }
    | Id '.' MCall              { % return $ MemberCall TypeError $1 $3 }
 
@@ -223,43 +243,43 @@ Cons : type '(' ')'      { % return $   (CCall $1 []) }
      | type '(' Exps ')' { % return $   (CCall $1 (reverse $3)) }
 
 -- Expresiones
-Exp : Exp '+' Exp              { % return $   (ESum TypeError $1 $3) }
-    | Exp '-' Exp              { % return $   (EDif TypeError $1 $3) }
-    | Exp '*' Exp              { % return $   (EMul TypeError $1 $3) }
-    | Exp '/' Exp              { % return $   (EDiv TypeError $1 $3) }
-    | Exp '%' Exp              { % return $   (EMod TypeError $1 $3) }
-    | Exp '**' Exp             { % return $   (EPot TypeError $1 $3) }
-    | Exp '//' Exp             { % return $   (EDivE TypeError $1 $3) }
-    | Exp '<<' Exp             { % return $   (ELShift TypeError $1 $3) }
-    | Exp '>>' Exp             { % return $   (ERShift TypeError $1 $3) }
-    | Exp '|' Exp              { % return $   (EBitOr TypeError $1 $3) }
-    | Exp '^' Exp              { % return $   (EBitXor TypeError $1 $3) }
-    | Exp '&' Exp              { % return $   (EBitAnd TypeError $1 $3) }
-    | Exp '||' Exp             { % return $   (EOr TypeError $1 $3) }
-    | Exp '&&' Exp             { % return $   (EAnd TypeError $1 $3) }
-    | Exp '>' Exp              { % return $   (EGreat TypeError $1 $3) }
-    | Exp '<' Exp              { % return $   (ELess TypeError $1 $3) }
-    | Exp '>=' Exp             { % return $   (EGEq TypeError $1 $3) }
-    | Exp '<=' Exp             { % return $   (ELEq TypeError $1 $3) }
-    | Exp '==' Exp             { % return $   (EEqual TypeError $1 $3) }
-    | Exp '/=' Exp             { % return $   (ENEq TypeError $1 $3) }
-    | '-' Exp %prec NEG        { % return $   (ENeg TypeError $2) }
-    | '!' Exp                  { % return $   (ENot TypeError $2) }
-    | '~' Exp                  { % return $   (EBitNot TypeError $2) }
-    | '(' Exp ')'              { % return $   $2 }
-    | Id                       { % return $   (EIdent TypeError $1) }
-    | num                      { % return $   (EToken TypeError $1) }
-    | true                     { % return $   (EToken TypeError $1) }
-    | false                    { % return $   (EToken TypeError $1) }
-    | str                      { % return $   (EToken TypeError $1) }
-    | char                     { % return $   (EToken TypeError $1) }
-    | List                     { % return $   $1 }
-    | Arr                      { % return $   $1 }
-    | Dict                     { % return $   $1 }
-    | Tup                      { % return $   $1 }
-    | FunCall                  { % return $   (EFCall TypeError $1) }
-    | Read                     { % return $   $1 }
-    | Id '?'                   { % return $   (ERef TypeError $1) }
+Exp : Exp '+' Exp              { % return (ESum TypeError $1 $3) }
+    | Exp '-' Exp              { % return (EDif TypeError $1 $3) }
+    | Exp '*' Exp              { % return (EMul TypeError $1 $3) }
+    | Exp '/' Exp              { % return (EDiv TypeError $1 $3) }
+    | Exp '%' Exp              { % return (EMod TypeError $1 $3) }
+    | Exp '**' Exp             { % return (EPot TypeError $1 $3) }
+    | Exp '//' Exp             { % return (EDivE TypeError $1 $3) }
+    | Exp '<<' Exp             { % return (ELShift TypeError $1 $3) }
+    | Exp '>>' Exp             { % return (ERShift TypeError $1 $3) }
+    | Exp '|' Exp              { % return (EBitOr TypeError $1 $3) }
+    | Exp '^' Exp              { % return (EBitXor TypeError $1 $3) }
+    | Exp '&' Exp              { % return (EBitAnd TypeError $1 $3) }
+    | Exp '||' Exp             { % return (EOr TypeError $1 $3) }
+    | Exp '&&' Exp             { % return (EAnd TypeError $1 $3) }
+    | Exp '>' Exp              { % return (EGreat TypeError $1 $3) }
+    | Exp '<' Exp              { % return (ELess TypeError $1 $3) }
+    | Exp '>=' Exp             { % return (EGEq TypeError $1 $3) }
+    | Exp '<=' Exp             { % return (ELEq TypeError $1 $3) }
+    | Exp '==' Exp             { % return (EEqual TypeError $1 $3) }
+    | Exp '/=' Exp             { % return (ENEq TypeError $1 $3) }
+    | '-' Exp %prec NEG        { % return (ENeg TypeError $2) }
+    | '!' Exp                  { % return (ENot TypeError $2) }
+    | '~' Exp                  { % return (EBitNot TypeError $2) }
+    | '(' Exp ')'              { % return $2 }
+    | Id                       { % return (EIdent (returnType $1) $1) }
+    | num                      { % return (EToken (getNumType $ tokenVal $1) $1) }
+    | true                     { % return (EToken TypeBool $1) }
+    | false                    { % return (EToken TypeBool $1) }
+    | str                      { % return (EToken TypeString $1) }
+    | char                     { % return (EToken TypeChar $1) }
+    | List                     { % return $1 }
+    | Arr                      { % return $1 }
+    | Dict                     { % return $1 }
+    | Tup                      { % return $1 }
+    | FunCall                  { % return (EFCall TypeError $1) }
+    | Read                     { % return $1 }
+    | Id '?'                   { % return (ERef TypeError $1) }
 
 Exps : Exps ',' Exp            { % return $   ($3 : $1) }
      | Exp                     { % return $   [$1] }
@@ -303,19 +323,21 @@ FuncScope : {- empty -}                    { % lift $ do {i <- getScopeNumber;
 ParRet : Type Ret id          { % do { i <- lift getActualScope;
                                        l <- return ((\((x,y),(z,n)) -> (($1 : x,$3 : y ),(z,n))) $2); 
                                        t <- mapM getType (fst $ fst l);
-                                       mapM_ pervasiveCheck (map tokenVal (snd $ fst l));
+                                       zipWithM_ pervasiveCheck (map tokenVal (snd $ fst l)) (map tokenPos (snd $ fst l));
+                                       zipWith3M_ redeclaredCheck (map tokenVal (snd $ fst l)) (repeat i) (map tokenPos (snd $ fst l));
                                        mapM_ searchTable (map typeString (fst $ snd l));
-                                       lift $ mapM_ (\(x,y) -> 
-                                           insertSymS (tokenVal y) (SymScope i x [] (tokenPos y))) (zip t (snd $ fst l));
+                                       lift $ zipWithM_ (\x y -> 
+                                           insertSymS (tokenVal y) (SymScope i x [] (tokenPos y))) t (snd $ fst l);
                                        return l; } }
 
 ParNoRet : Type NoRet id    { % do { i <- lift getActualScope;
                                      l <- return ((\((x,y),(_,n)) -> 
                                          (($1 : x,$3 : y ),([],n))) $2); 
                                      t <- mapM getType (fst $ fst l);
-                                     mapM_ pervasiveCheck (map tokenVal (snd $ fst l));
-                                     lift $ mapM_ (\(x,y) -> 
-                                         insertSymS (tokenVal y) (SymScope i x [] (tokenPos y))) (zip t (snd $ fst l));
+                                     zipWithM_ pervasiveCheck (map tokenVal (snd $ fst l)) (map tokenPos (snd $ fst l));
+                                     zipWith3M_ redeclaredCheck (map tokenVal (snd $ fst l)) (repeat i) (map tokenPos (snd $ fst l));
+                                     lift $ zipWithM_ (\x y -> 
+                                         insertSymS (tokenVal y) (SymScope i x [] (tokenPos y))) t (snd $ fst l);
                                      return l; } }
 
 Ret : ',' Type Ret id ','     { % return $ (\((x,y),(z,n)) -> (($2 : x,$4 : y ),(z,n))) $3  }

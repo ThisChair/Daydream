@@ -6,6 +6,7 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Writer.Lazy
 import Control.Monad.Trans.Class(lift)
+import Control.Monad(zipWithM_)
 import Lexer
 import SyntaxTree
 
@@ -143,6 +144,15 @@ searchTable id = do
             lift $ lift $ tell $ ["Undeclared symbol: " ++ id]
             return (id,-1, noPos)
 
+searchTable' :: String -> ParseMonad ((String,Integer,AlexPosn),Type)
+searchTable' id = do
+    ss <- lift get
+    case (lookupTable' id ss) of
+        Just sym -> return ((id,scope sym, pos sym), fst $ typeS sym)
+        Nothing -> do
+            lift $ lift $ tell $ ["Undeclared symbol: " ++ id]
+            return ((id,-1, noPos),TypeError)
+
 getType :: TypeName -> ParseMonad (Type,Integer)
 getType (Name _ s) = do
     (t,scope) <- searchType s
@@ -177,99 +187,29 @@ isPervasive id (sym,_,_) = case search of
     where
         search = M.lookup id sym >>= (\x -> M.lookup 0 x)
 
-pervasiveCheck :: String -> ParseMonad ()
-pervasiveCheck s = do
+pervasiveCheck :: String -> AlexPosn -> ParseMonad ()
+pervasiveCheck id (AlexPn _ i j) = do
     ss <- lift get
-    if (isPervasive s ss) 
-        then (lift $ lift $ tell $ ["Can't redefine: " ++ s]) 
+    if (isPervasive id ss) 
+        then (lift $ lift $ tell $ [(showPos i j) ++ ": " ++ id ++ " is a reserved name and can not be used." ]) 
         else return ()
 
--- Funciones para retorno de tipos -- 
+redeclaredCheck :: String -> Integer -> AlexPosn -> ParseMonad ()
+redeclaredCheck id scope (AlexPn _ i j) = do
+        (sym,_,_) <- lift get
+        let search = M.lookup id sym >>= (\x -> M.lookup scope x)
+        case search of
+            Just ss -> lift $ lift $ redeclaredError id i j (pos ss)
+            Nothing -> return ()
+        
 
--- Init 
-returnTypeInit :: Init -> Type
-returnTypeInit (Init t _ _ _) = t
+redeclaredError :: Monad m => String -> Int -> Int -> AlexPosn -> WriterT [String] m ()
+redeclaredError id i j (AlexPn _ i' j') = tell [(showPos i j) ++ ": " ++ id ++ " already declared at: " ++ (showPos i' j')] 
 
--- Module
-returnTypeModule :: Module -> Type
-returnTypeModule (Module t _) = t 
-returnTypeModule (Main t) = t
+zipWith3M_ :: Applicative m => (a -> b -> c -> m d) -> [a] -> [b] -> [c] -> m ()
+zipWith3M_ f x y z = zipWithM_ (\x' (y',z') -> f x' y' z') x (zip y z)
 
--- Import
-returnTypeImport :: Import -> Type
-returnTypeImport (Import t _) = t
+getNumType :: String -> Type
+getNumType n = if (elem '.' n) then TypeInt else TypeFloat
 
--- Instruction
-returnTypeInstruction :: Instruction -> Type
-returnTypeInstruction (Block t _) = t
-returnTypeInstruction (Assign t _) = t
-returnTypeInstruction (IfThen t _ _) = t
-returnTypeInstruction (IfElse t _ _ _) = t 
-returnTypeInstruction (While t _ _) = t 
-returnTypeInstruction (Det t _) = t 
-returnTypeInstruction (Ret t _) = t 
-returnTypeInstruction (Continue t) = t 
-returnTypeInstruction (Break t) = t 
-returnTypeInstruction (Print t _) = t 
-returnTypeInstruction (PrintLn t _) = t
 
--- For
-returnTypeFor :: For -> Type
-returnTypeFor (FromTo t _ _ _) = t
-returnTypeFor (FromToIf t _ _ _ _) = t
-returnTypeFor (FromToWithIf t _ _ _ _ _) = t
-returnTypeFor (FromToWith t _ _ _ _) = t
-returnTypeFor (InIf t _ _ _) = t
-
--- TypeName
-returnTypeTypeName :: TypeName -> Type
-returnTypeTypeName (Name t _) = t
-returnTypeTypeName (Array t _ _) = t
-returnTypeTypeName (List t _) = t
-returnTypeTypeName (Tuple t  _) = t
-returnTypeTypeName (Dict t _) = t
-
--- Identifier
-returnTypeIdentifier :: Identifier -> Type
-returnTypeIdentifier (Variable t _) = t
-returnTypeIdentifier (Index t _ _) = t
-returnTypeIdentifier (MemberCall t _ _) = t
-
--- Exp
-returnTypeExp :: Exp -> Type
-returnTypeExp (ESum t _ _ ) = t
-returnTypeExp (EDif t _ _ ) = t
-returnTypeExp (EMul t _ _ ) = t
-returnTypeExp (EDiv t _ _ ) = t
-returnTypeExp (EMod t _ _ ) = t
-returnTypeExp (EPot t _ _ ) = t
-returnTypeExp (EDivE t _ _ ) = t
-returnTypeExp (ELShift t _ _ ) = t
-returnTypeExp (ERShift t _ _ ) = t
-returnTypeExp (EBitOr t _ _ ) = t
-returnTypeExp (EBitAnd t _ _ ) = t
-returnTypeExp (EBitXor t _ _ ) = t
-returnTypeExp (EOr t _ _ ) = t
-returnTypeExp (EAnd t _ _ ) = t
-returnTypeExp (EGEq t _ _ ) = t
-returnTypeExp (EGreat t _ _ ) = t
-returnTypeExp (ELEq t _ _ ) = t
-returnTypeExp (ELess t _ _ ) = t
-returnTypeExp (ENEq t _ _ ) = t
-returnTypeExp (EEqual t _ _ ) = t
-returnTypeExp (ENeg t _ ) = t
-returnTypeExp (ENot t _ ) = t
-returnTypeExp (EBitNot t _ ) = t 
-returnTypeExp (EFCall t _ ) = t
-returnTypeExp (EToken t _ ) = t
-returnTypeExp (EList t _ ) = t
-returnTypeExp (EArr t _ ) = t
-returnTypeExp (EDict t _ ) = t
-returnTypeExp (ETup t _ ) = t
-returnTypeExp (EIdent t _ ) = t
-returnTypeExp (Read t ) = t
-returnTypeExp (ERef t _ ) = t
-
--- FCall
-returnTypeFCall :: FCall -> Type
-returnTypeFCall (FCall t _ _) = t
