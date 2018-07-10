@@ -7,7 +7,7 @@ import SymTable
 import Control.Monad.Trans.State.Strict
 import Control.Monad.IO.Class(liftIO)
 import Control.Monad.Trans.Class(lift)
-import Control.Monad(zipWithM_)
+import Control.Monad(zipWithM_,zipWithM)
 }
 %monad { ParseMonad }
 %name parseDdr
@@ -65,6 +65,8 @@ import Control.Monad(zipWithM_)
     ']'        { TCloseB _ }
     '{'        { TOpenC _ }
     '}'        { TCloseC _ }
+    '|:'       { TOpenT _ }
+    ':|'       { TCloseT _ }
     '<'        { TLess _ }
     '>'        { TGreat _ }
     '%'        { TPercent _ }
@@ -119,8 +121,8 @@ In : SingleI ';'               { % return $1 }
    | Iterator                  { % return $1 }
    | Block                     { % return $ Block TypeError $1 }
 
-SingleI : IDeclaration         { % return $ Assign TypeError $1 }
-        | Assign               { % return $ Assign TypeError $1 }
+SingleI : IDeclaration         { % return $ Assign (assignType $1) $1 }
+        | Assign               { % checkAssign $1 >>= (\t -> return $ Assign t $1) }
         | return Exp           { % return $ Ret TypeError $2 }
         | Print                { % return $ $1 }
         | PrintLn              { % return $ $1 }
@@ -140,7 +142,7 @@ BlockScope : {- empty -}                    { % lift $ do {i <- getScopeNumber;
                                                           pushS (StackEntry i SBlock Nothing []);
                                                           addNumber } }
 
-Algebraic : AlgScope data type dream Sums wake  { % do  {
+Algebraic : AlgScope data type '|:' Sums ':|'  { % do  {
                                                             pervasiveCheck (tokenVal $3) (tokenPos $3);
                                                             i <- lift getActualScope;
                                                             lift popS;
@@ -182,10 +184,12 @@ Declaration : Type Ids ';'     { % do { (zipWithM_ pervasiveCheck (map tokenVal 
 
 IDeclaration : Type DAssign { % do { zipWithM_ pervasiveCheck (map idString (fst $2)) (map idPos (fst $2));
                                      t <- getType $1;
-                                     mapM_ (\(Variable TypeError (x,y,z)) -> 
-                                                redeclaredCheck x y z >>                                                
+                                     ts <- mapM (\e -> checkDAssign (fst t) e (idPos $ head (fst $2))) (snd $2);
+                                     mapM_ (\(Variable _ (x,y,z)) ->
+                                                redeclaredCheck x y z >>
                                                 (lift $ insertSymS x (SymScope y t [] z))) (fst $2);
-                                     return (fst $2, reverse (snd $2)) 
+                                     vs <- zipWithM (\(Variable _ v) tc -> return $ Variable tc v) (fst $2) ts;
+                                     return (vs, reverse (snd $2));
                                    }
                             }
 
@@ -218,7 +222,7 @@ Id : id                        { % do{
                                         return $ (Variable t s); 
                                      }
                                }
-   | Id '[' Exp ']'            { % return $ Index TypeError $1 $3 }
+   | Id '[' Exp ']'            { % checkIndex (idString $1) $3 (idPos $1) >>=(\t -> return $ Index t $1 $3) }
    | Id '.' MCall              { % return $ MemberCall TypeError $1 $3 }
 
 MCall : MCall '.' id           { % return ($3 : $1) }
@@ -227,11 +231,12 @@ MCall : MCall '.' id           { % return ($3 : $1) }
 Types : Types ',' Type         { % return ($3 : $1) }
       | Type                   { % return [$1] }
 
-Type : type                    { % return (Name TypeError (tokenVal $1)) }
-     | '[' Type ']'            { % return (List TypeError $2) }
-     | '{' Type ':' num '}'    { % return (Array TypeError $2 $4) }
-     | '[' Type ':' Type ']'   { % return (Dict TypeError ($2,$4)) }
-     | '(' Types ')'           { % return (Tuple TypeError $ reverse $2) }
+Type : type                    { % return (Name TypeType (tokenVal $1)) }
+     | '[' Type ']'            { % return (List TypeType $2) }
+     | '{' Type ':' num '}'    { % return (Array TypeType $2 $4) }
+     | '[' Type ':' Type ']'   { % return (Dict TypeType ($2,$4)) }
+     | '(' Types ')'           { % return (Tuple TypeType $ reverse $2) }
+     | ':' Type '>'            { % return (Pointer TypeType $2) }
 
 Assign : Id ',' Assign ',' RV  { % return (( \(l,r) -> ($1:l,$5:r) ) $3) }
        | Id '=' RV             { % return ([$1],[$3]) }
@@ -243,29 +248,29 @@ Cons : type '(' ')'      { % return $   (CCall $1 []) }
      | type '(' Exps ')' { % return $   (CCall $1 (reverse $3)) }
 
 -- Expresiones
-Exp : Exp '+' Exp              { % return (ESum TypeError $1 $3) }
-    | Exp '-' Exp              { % return (EDif TypeError $1 $3) }
-    | Exp '*' Exp              { % return (EMul TypeError $1 $3) }
-    | Exp '/' Exp              { % return (EDiv TypeError $1 $3) }
-    | Exp '%' Exp              { % return (EMod TypeError $1 $3) }
-    | Exp '**' Exp             { % return (EPot TypeError $1 $3) }
-    | Exp '//' Exp             { % return (EDivE TypeError $1 $3) }
-    | Exp '<<' Exp             { % return (ELShift TypeError $1 $3) }
-    | Exp '>>' Exp             { % return (ERShift TypeError $1 $3) }
-    | Exp '|' Exp              { % return (EBitOr TypeError $1 $3) }
-    | Exp '^' Exp              { % return (EBitXor TypeError $1 $3) }
-    | Exp '&' Exp              { % return (EBitAnd TypeError $1 $3) }
-    | Exp '||' Exp             { % return (EOr TypeError $1 $3) }
-    | Exp '&&' Exp             { % return (EAnd TypeError $1 $3) }
-    | Exp '>' Exp              { % return (EGreat TypeError $1 $3) }
-    | Exp '<' Exp              { % return (ELess TypeError $1 $3) }
-    | Exp '>=' Exp             { % return (EGEq TypeError $1 $3) }
-    | Exp '<=' Exp             { % return (ELEq TypeError $1 $3) }
-    | Exp '==' Exp             { % return (EEqual TypeError $1 $3) }
-    | Exp '/=' Exp             { % return (ENEq TypeError $1 $3) }
-    | '-' Exp %prec NEG        { % return (ENeg TypeError $2) }
-    | '!' Exp                  { % return (ENot TypeError $2) }
-    | '~' Exp                  { % return (EBitNot TypeError $2) }
+Exp : Exp '+' Exp              { % checkNumBin $1 $3 (tokenPos $2) >>= (\t -> return $ ESum t $1 $3) }
+    | Exp '-' Exp              { % checkNumBin $1 $3 (tokenPos $2) >>= (\t -> return $ EDif t $1 $3) }
+    | Exp '*' Exp              { % checkNumBin $1 $3 (tokenPos $2) >>= (\t -> return $ EMul t $1 $3) }
+    | Exp '/' Exp              { % checkNumBin $1 $3 (tokenPos $2) >>= (\t -> return $ EDiv t $1 $3) }
+    | Exp '%' Exp              { % checkIntBin $1 $3 (tokenPos $2) >>= (\t -> return $ EMod t $1 $3) }
+    | Exp '**' Exp             { % checkNumBin $1 $3 (tokenPos $2) >>= (\t -> return $ EPot t $1 $3) }
+    | Exp '//' Exp             { % checkIntBin $1 $3 (tokenPos $2) >>= (\t -> return $ EDivE t $1 $3) }
+    | Exp '<<' Exp             { % checkIntBin $1 $3 (tokenPos $2) >>= (\t -> return $ ELShift t $1 $3) }
+    | Exp '>>' Exp             { % checkIntBin $1 $3 (tokenPos $2) >>= (\t -> return $ ERShift t $1 $3) }
+    | Exp '|' Exp              { % checkIntBin $1 $3 (tokenPos $2) >>= (\t -> return $ EBitOr t $1 $3) }
+    | Exp '^' Exp              { % checkIntBin $1 $3 (tokenPos $2) >>= (\t -> return $ EBitXor t $1 $3) }
+    | Exp '&' Exp              { % checkIntBin $1 $3 (tokenPos $2) >>= (\t -> return $ EBitAnd t $1 $3) }
+    | Exp '||' Exp             { % checkBoolBin $1 $3 (tokenPos $2) >>= (\t -> return $ EOr t $1 $3) }
+    | Exp '&&' Exp             { % checkBoolBin $1 $3 (tokenPos $2) >>= (\t -> return $ EAnd t $1 $3) }
+    | Exp '>' Exp              { % checkNumComp $1 $3 (tokenPos $2) >>= (\t -> return $ EGreat t $1 $3) }
+    | Exp '<' Exp              { % checkNumComp $1 $3 (tokenPos $2) >>= (\t -> return $ ELess t $1 $3) }
+    | Exp '>=' Exp             { % checkNumComp $1 $3 (tokenPos $2) >>= (\t -> return $ EGEq t $1 $3) }
+    | Exp '<=' Exp             { % checkNumComp $1 $3 (tokenPos $2) >>= (\t -> return $ ELEq t $1 $3) }
+    | Exp '==' Exp             { % checkComp $1 $3 (tokenPos $2) >>= (\t -> return $ EEqual t $1 $3) }
+    | Exp '/=' Exp             { % checkComp $1 $3 (tokenPos $2) >>= (\t -> return $ ENEq t $1 $3) }
+    | '-' Exp %prec NEG        { % checkNumUn $2 (tokenPos $1) >>= (\t -> return $ ENeg t $2) }
+    | '!' Exp                  { % checkBoolUn $2 (tokenPos $1) >>= (\t -> return $ ENot t $2) }
+    | '~' Exp                  { % checkNumUn $2 (tokenPos $1) >>= (\t -> return $ EBitNot t $2) }
     | '(' Exp ')'              { % return $2 }
     | Id                       { % return (EIdent (returnType $1) $1) }
     | num                      { % return (EToken (getNumType $ tokenVal $1) $1) }
@@ -284,22 +289,22 @@ Exp : Exp '+' Exp              { % return (ESum TypeError $1 $3) }
 Exps : Exps ',' Exp            { % return $   ($3 : $1) }
      | Exp                     { % return $   [$1] }
 
-List : '[' Exps ']'            { % return $   (EList TypeError (reverse $2)) }
+List : '[' Exps ']'            { % checkListType $2 (tokenPos $1) >>=(\t -> return $ EList t (reverse $2)) }
      | '[' ']'                 { % return $   (EList TypeError []) }
 
-Arr : '{' Exps '}'             { % return $   (EArr TypeError (reverse $2)) }
+Arr : '{' Exps '}'             { % checkArrType $2 (tokenPos $1) >>= (\t -> return $ EArr t (reverse $2)) }
     | '{' '}'                  { % return $   (EArr TypeError []) }
 
-Dict : '[' KV ']'              { % return $   (EDict TypeError (reverse $2)) }
+Dict : '[' KV ']'              { % checkDictType $2 (tokenPos $1) >>= (\t -> return $ EDict t (reverse $2)) }
 
 KV : KV ',' Exp ':' Exp        { % return $   (($3,$5) : $1)}
    | Exp ':' Exp               { % return $   [($1,$3)] }
 
-Tup : '(' Exp ',' Exps ')'     { % return $   (ETup TypeError (reverse ($2 : $4))) }
+Tup : '(' Exp ',' Exps ')'     { % checkTupType ($2:(reverse $4)) (tokenPos $1) >>= (\t -> return $ ETup t ($2 : (reverse $4))) }
 
 -- Funciones
-FunCall : id '(' Exps ')'      { % return $    (FCall TypeError $1 $3) }
-        | id '(' ')'           { % return $    (FCall TypeError $1 []) }
+FunCall : id '(' Exps ')'      { % return (FCall TypeError $1 $3) }
+        | id '(' ')'           { % return (FCall TypeError $1 []) }
 
 Function : FuncScope func '('ParRet ')' Block { % lift $ do { popS;
                                                               i <- getActualScope; 
@@ -350,8 +355,8 @@ NoRet : ',' Type NoRet id ',' { % return $ (\((x,y),(_,n)) -> (($2 : x,$4 : y),(
 Selector : If                  { % return $ $1 }
          | Case                { % return $ Block TypeError [] }
 
-If : if Exp then In            { % return $   (IfThen TypeError $2 $4) }
-   | if Exp then In else In    { % return $   (IfElse TypeError $2 $4 $6) }
+If : if Exp then In            { % checkIf $2 $4 (tokenPos $1) >>= (\t -> return $ IfThen t $2 $4) }
+   | if Exp then In else In    { % checkIfE $2 $4 $6 (tokenPos $1) >>= (\t -> return $ IfElse t $2 $4 $6) }
 
 Case : case Exp of Conds ';'   { }
 

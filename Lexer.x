@@ -35,7 +35,12 @@ tokens :-
     case                    { (\p s -> TCase     p) }
     of                      { (\p s -> TOf       p) }
     module                  { (\p s -> TModule   p) }
+    malloc                  { (\p s -> TMalloc   p) }
+    free                    { (\p s -> TFree     p) }
+    len                     { (\p s -> TLen      p) }
     -- Symbols
+    \$                      { (\p s -> TDeref   p) }
+    \+\+                    { (\p s -> TConcat  p) }
     \/\=                    { (\p s -> TNotEq   p) }
     \&\&                    { (\p s -> TAnd     p) }
     \|\|                    { (\p s -> TOr      p) }
@@ -62,6 +67,8 @@ tokens :-
     \]                      { (\p s -> TCloseB  p) }
     \{                      { (\p s -> TOpenC   p) }
     \}                      { (\p s -> TCloseC  p) }
+    \|\:                    { (\p s -> TOpenT   p) }
+    \:\|                    { (\p s -> TCloseT  p) }
     \<                      { (\p s -> TLess    p) }
     \>                      { (\p s -> TGreat   p) }
     \%                      { (\p s -> TPercent p) }
@@ -110,6 +117,11 @@ data Token =
     TCase       { tokenPos :: AlexPosn }                     |
     TOf         { tokenPos :: AlexPosn }                     |
     TModule     { tokenPos :: AlexPosn }                     |
+    TMalloc     { tokenPos :: AlexPosn }                     |
+    TFree       { tokenPos :: AlexPosn }                     |
+    TLen        { tokenPos :: AlexPosn }                     |
+    TConcat     { tokenPos :: AlexPosn }                     |
+    TDeref      { tokenPos :: AlexPosn }                     |     
     TNotEq      { tokenPos :: AlexPosn }                     |
     TAnd        { tokenPos :: AlexPosn }                     |
     TOr         { tokenPos :: AlexPosn }                     |
@@ -136,6 +148,8 @@ data Token =
     TCloseB     { tokenPos :: AlexPosn }                     |
     TOpenC      { tokenPos :: AlexPosn }                     |
     TCloseC     { tokenPos :: AlexPosn }                     |
+    TOpenT      { tokenPos :: AlexPosn }                     |
+    TCloseT     { tokenPos :: AlexPosn }                     |
     TLess       { tokenPos :: AlexPosn }                     |
     TGreat      { tokenPos :: AlexPosn }                     |
     TPercent    { tokenPos :: AlexPosn }                     |
@@ -179,6 +193,11 @@ instance Show Token where
     show (TCase     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'case\'"
     show (TOf       (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'of\'"
     show (TModule   (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'module\'"
+    show (TMalloc   (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'malloc\'"
+    show (TFree     (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'free\'"
+    show (TLen      (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'len\'"
+    show (TConcat   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'++\'"
+    show (TDeref    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'$\'"
     show (TNotEq    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'/=\'"
     show (TAnd      (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'&&\'"
     show (TOr       (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'||\'"
@@ -205,6 +224,8 @@ instance Show Token where
     show (TCloseB   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \']\'"
     show (TOpenC    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'{\'"
     show (TCloseC   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'}\'"
+    show (TOpenT    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'|:\'"
+    show (TCloseT   (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \':|\'"
     show (TLess     (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'<\'"
     show (TGreat    (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'>\'"
     show (TPercent  (AlexPn _ i j)) = (showPos i j) ++ " - Symbol: \'%\'"
@@ -224,5 +245,6 @@ instance Show Token where
     show (TUndef    (AlexPn _ i j) s) = (showPos i j) ++ " - Unexpected token: " ++ s
 
 showPos :: Int -> Int -> String
+showPos 0 0 = ""
 showPos i j = "Row " ++ show i ++ ", Column " ++ show j
 }

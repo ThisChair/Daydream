@@ -6,7 +6,7 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Writer.Lazy
 import Control.Monad.Trans.Class(lift)
-import Control.Monad(zipWithM_)
+import Control.Monad(zipWithM_,zipWithM)
 import Lexer
 import SyntaxTree
 
@@ -94,12 +94,7 @@ scopeZero = [
     ("_ptr",  (SymScope 0 (TypeType,0) [] noPos))
     ]
 scopeOne :: [(String,SymScope)]
-scopeOne = [
-    ("malloc", (SymScope 1 (TypeFunc [TypeInt] [TypePointer TypeInt],0) [("size",2)] noPos)),
-    ("size",   (SymScope 3 (TypeInt,0) [] noPos)),
-    ("free",   (SymScope 1 (TypeFunc [TypePointer TypeInt] [],0) [("ptr",3)] noPos)),
-    ("ptr",    (SymScope 4 (TypePointer TypeInt,0) [] noPos))
-    ]
+scopeOne = []
 
 initialSymTable :: SymTable
 initialSymTable = P.foldr insertSym' M.empty (scopeZero ++ scopeOne)
@@ -170,6 +165,9 @@ getType (Dict _ (k,v)) = do
     (tk,_) <- getType k
     (tv,_) <- getType v
     return (TypeDict tk tv,0)
+getType (Pointer _ t) = do
+    (tp,_) <- getType t
+    return (TypePointer tp, 0)
 
 searchType :: String -> ParseMonad (String,Integer)
 searchType id = do
@@ -210,6 +208,229 @@ zipWith3M_ :: Applicative m => (a -> b -> c -> m d) -> [a] -> [b] -> [c] -> m ()
 zipWith3M_ f x y z = zipWithM_ (\x' (y',z') -> f x' y' z') x (zip y z)
 
 getNumType :: String -> Type
-getNumType n = if (elem '.' n) then TypeInt else TypeFloat
+getNumType n = if (elem '.' n) then TypeFloat else TypeInt
 
+checkListType :: [Exp] -> AlexPosn -> ParseMonad Type
+checkListType es (AlexPn _ i j) = case (expsType es) of
+    TypeError -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ " Elements of a list must be of the same type."]
+        return TypeError
+    t -> return $ TypeList t
 
+checkArrType :: [Exp] -> AlexPosn -> ParseMonad Type
+checkArrType es (AlexPn _ i j) = case (expsType es) of
+    TypeError -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ " Elements of an array must be of the same type."]
+        return TypeError
+    t -> return $ TypeArray t (show $ length es)
+
+checkDictType :: [(Exp,Exp)] -> AlexPosn -> ParseMonad Type
+checkDictType es (AlexPn _ i j) = case (expsType $ P.map fst es) of
+    TypeError -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Keys of a dictionary must be of the same type."]
+        return TypeError
+    tk -> case (expsType $ P.map snd es) of
+        TypeError -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Elements of a dictionary must be of the same type."]
+            return TypeError
+        tv -> return $ TypeDict tk tv
+
+checkTupType :: [Exp] -> AlexPosn -> ParseMonad Type
+checkTupType es (AlexPn _ i j) = if (elem TypeError (P.map returnType es)) 
+    then return TypeError
+    else return $ TypeTuple (P.map returnType es)
+
+checkNumBin :: Exp -> Exp -> AlexPosn -> ParseMonad Type
+checkNumBin l r (AlexPn _ i j) = case (returnType l) of
+    TypeInt -> case (returnType r) of
+        TypeInt -> return TypeInt
+        TypeFloat -> return TypeFloat
+        TypeError -> return TypeError
+        t -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
+            return TypeError
+    TypeFloat -> case (returnType r) of
+        TypeInt -> return TypeFloat
+        TypeFloat -> return TypeFloat
+        TypeError -> return TypeError
+        t -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
+            return TypeError
+    TypeError -> return TypeError
+    t -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as left operand."]
+        return TypeError
+
+checkIntBin :: Exp -> Exp -> AlexPosn -> ParseMonad Type
+checkIntBin l r (AlexPn _ i j) = case (returnType l) of
+    TypeInt -> case (returnType r) of
+        TypeInt -> return TypeInt
+        TypeError -> return TypeError
+        t -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Int, but got " ++ (show t) ++ " as right operand."]
+            return TypeError
+    TypeError -> return TypeError
+    t -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Int, but got " ++ (show t) ++ " as left operand."]
+        return TypeError
+
+checkNumUn :: Exp -> AlexPosn -> ParseMonad Type
+checkNumUn e (AlexPn _ i j) = case (returnType e) of
+    TypeInt -> return TypeInt
+    TypeFloat -> return TypeFloat
+    TypeError -> return TypeError
+    t -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t)]
+        return TypeError
+
+checkBoolUn :: Exp -> AlexPosn -> ParseMonad Type
+checkBoolUn e (AlexPn _ i j) = case (returnType e) of
+    TypeBool -> return TypeBool
+    TypeError -> return TypeError
+    t -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Bool, but got " ++ (show t)]
+        return TypeError
+
+checkBoolBin :: Exp -> Exp -> AlexPosn -> ParseMonad Type
+checkBoolBin l r (AlexPn _ i j) = case (returnType l) of
+    TypeBool -> case (returnType r) of
+        TypeBool -> return TypeBool
+        TypeError -> return TypeError
+        t -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Bool, but got " ++ (show t) ++ " as right operand."]
+            return TypeError
+    TypeError -> return TypeError
+    t -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Bool, but got " ++ (show t) ++ " as left operand."]
+        return TypeError
+
+checkNumComp :: Exp -> Exp -> AlexPosn -> ParseMonad Type
+checkNumComp l r (AlexPn _ i j) = case (returnType l) of
+    TypeInt -> case (returnType r) of
+        TypeInt -> return TypeBool
+        TypeFloat -> return TypeBool
+        TypeError -> return TypeError
+        t -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
+            return TypeError
+    TypeFloat -> case (returnType r) of
+        TypeInt -> return TypeBool
+        TypeFloat -> return TypeBool
+        TypeError -> return TypeError
+        t -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
+            return TypeError
+    TypeError -> return TypeError
+    t -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as left operand."]
+        return TypeError
+
+checkComp :: Exp -> Exp -> AlexPosn -> ParseMonad Type
+checkComp l r (AlexPn _ i j) = case (returnType l) of
+    TypeInt -> case (returnType r) of
+        TypeInt -> return TypeBool
+        TypeFloat -> return TypeBool
+        TypeBool -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected equal types, but got Int as left operand and Bool as right operand."]
+            return TypeError
+        TypeError -> return TypeError
+        t -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
+            return TypeError
+    TypeFloat -> case (returnType r) of
+        TypeInt -> return TypeBool
+        TypeFloat -> return TypeBool
+        TypeBool -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected equal types, but got Int as left operand and Bool as right operand."]
+            return TypeError
+        TypeError -> return TypeError
+        t -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
+            return TypeError
+    TypeBool -> case (returnType r) of
+        TypeBool -> return TypeBool
+        TypeError -> return TypeError
+        t -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Bool, but got " ++ (show t) ++ " as right operand."]
+            return TypeError
+    TypeError -> return TypeError
+    t -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected comparable type, but got " ++ (show t) ++ " as left operand."]
+        return TypeError
+
+checkIf :: Exp -> Instruction -> AlexPosn -> ParseMonad Type
+checkIf cond ins (AlexPn _ i j) = case (returnType cond, returnType ins) of
+    (TypeBool, TypeVoid) -> return TypeVoid
+    (TypeError, _) -> return TypeError
+    (_, TypeError) -> return TypeError
+    (t, TypeVoid) -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected bool in if condition, but got " ++ (show t)]
+        return TypeError
+    (TypeBool, t) -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expression of type " ++ (show t) ++ "when expecting instruction."]
+        return TypeError
+
+checkIfE :: Exp -> Instruction -> Instruction -> AlexPosn -> ParseMonad Type
+checkIfE cond ins inE (AlexPn _ i j) = case (returnType cond, returnType ins, returnType inE) of
+    (TypeBool, TypeVoid, TypeVoid) -> return TypeVoid
+    (TypeError, _, _) -> return TypeError
+    (_, TypeError, _) -> return TypeError
+    (_, _, TypeError) -> return TypeError
+    (t, TypeVoid, TypeVoid) -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected bool in if condition, but got " ++ (show t)]
+        return TypeError
+    (TypeBool, t, TypeVoid) -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expression of type " ++ (show t) ++ "when expecting instruction."]
+        return TypeError
+    (TypeBool, TypeVoid, t) -> do
+        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expression of type " ++ (show t) ++ "when expecting instruction."]
+        return TypeError
+
+checkDAssign :: Type -> RightValue -> AlexPosn -> ParseMonad Type
+checkDAssign TypeError _ _ = return TypeError
+checkDAssign t (ValueExp e) (AlexPn _ i j) = case (returnType e) of
+    TypeError -> return TypeError
+    x -> if t == x
+        then return TypeVoid
+        else do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Can't assign " ++ (show x) ++ " to " ++ (show t)]
+            return TypeError
+checkDAssign t (ValueCons c) (AlexPn _ i j) = return TypeError
+
+assignType :: ([Identifier],[RightValue]) -> Type
+assignType (ids,_) = if hasError then TypeError else TypeVoid
+    where
+        hasError = elem TypeError (P.map returnType ids)
+
+checkIndex :: String -> Exp -> AlexPosn -> ParseMonad Type
+checkIndex id e (AlexPn _ i j) = do
+    (_,t) <- searchTable' id
+    case (returnType e) of
+        TypeError -> return TypeError
+        TypeInt -> case t of
+            TypeArray at _ -> return at
+            TypeList lt -> return lt
+            TypeError -> return TypeError
+            te -> do
+                lift $ lift $ tell [(showPos i j) ++ ": " ++ "Not indexable type: " ++ (show te)]
+                return TypeError
+        te -> do
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expecting index by integers, but instead got " ++ (show te)]
+            return TypeError
+
+checkAssign :: ([Identifier],[RightValue]) -> ParseMonad Type
+checkAssign (ids,rvs) = do
+    ts <- zipWithM checkSingle ids rvs
+    if (elem TypeError ts) then (return TypeError) else (return TypeVoid)
+
+checkSingle :: Identifier -> RightValue -> ParseMonad Type
+checkSingle (Variable t (id,_,(AlexPn _ i j))) (ValueExp e) = case (t,returnType e) of
+    (TypeError,_) -> return TypeError
+    (_, TypeError) -> return TypeError
+    (TypeFloat, TypeInt) -> return TypeVoid  
+    (t,te) -> if (t == te) 
+        then return TypeVoid
+        else do 
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Variable " ++ id ++ " of type " ++ (show t) ++ " can't be assigned with type " ++ (show te)]
+            return TypeError
+checkSingle _ _ = return TypeError

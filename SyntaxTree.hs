@@ -1,5 +1,6 @@
 module SyntaxTree where
 import Lexer
+import Data.List (nub)
 
 class AST a where
     returnType :: a -> Type
@@ -51,22 +52,26 @@ typeString (List _ _) = "_list"
 typeString (Array _ _ _) = "_array"
 typeString (Tuple _ _) = "_tuple"
 typeString (Dict _ _) = "_dict"
+typeString (Pointer _ _) = "_pointer"
 
-data TypeName = 
+data TypeName =
     Name Type String              |
     Array Type TypeName Token     |
     List Type TypeName            |
     Tuple Type [TypeName]         |
-    Dict Type (TypeName,TypeName) 
+    Dict Type (TypeName,TypeName) |
+    Pointer Type TypeName 
     deriving (Show)
 
 idString :: Identifier -> String
 idString (Variable _ (s,_,_)) = s
-idString _ = error $ "No variable"
+idString (Index _ id _) = idString id
+idString (MemberCall _ id _) = idString id
 
 idPos :: Identifier -> AlexPosn
 idPos (Variable _ (_,_,p)) = p
-idPos _ = error $ "No variable"
+idPos (Index _ id _) = idPos id
+idPos (MemberCall _ id _) = idPos id
 
 data Identifier = 
     Variable Type (String,Integer,AlexPosn) |
@@ -126,7 +131,24 @@ data Type = TypeInt                |
             TypeFunc [Type] [Type] |
             TypePointer Type       |
             TypeData String
-            deriving (Show,Eq)
+            deriving (Eq)
+
+instance Show Type where
+    show TypeInt = "Int"
+    show TypeFloat = "Float"
+    show TypeBool = "Bool"
+    show TypeChar = "Char"
+    show TypeString = "String"
+    show TypeVoid = "Void"
+    show TypeError = "Type Error"
+    show TypeType = "Type"
+    show (TypeArray t n) = "Array of " ++ (show t) ++ " of size " ++ n
+    show (TypeList t) = "List of " ++ (show t)
+    show (TypeDict k v) = "Dictionary of pairs (" ++ (show k) ++ ", " ++ (show v) ++ ")"
+    show (TypeTuple t) = "Tuple of: " ++ (show t)
+    show (TypeFunc a r) = "Function from " ++ (show a) ++ " to " ++ (show r)
+    show (TypePointer t) = "Pointer of " ++ (show t)
+    show (TypeData s) = s
 
 -- Funciones para retorno de tipos -- 
 
@@ -172,6 +194,7 @@ instance AST TypeName where
     returnType (List t _) = t
     returnType (Tuple t  _) = t
     returnType (Dict t _) = t
+    returnType (Pointer t _) = t
 
 -- Identifier
 instance AST Identifier where
@@ -217,3 +240,9 @@ instance AST Exp where
 -- FCall
 instance AST FCall where
     returnType (FCall t _ _) = t
+
+expsType :: [Exp] -> Type
+expsType es = case (nub $ map returnType es) of
+    t:[] -> t
+    _ -> TypeError
+    

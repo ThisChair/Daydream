@@ -76,22 +76,86 @@ main = do
     let toks = alexScanTokens s
     let inv = filter undef toks
     let val = (inv /= [])
+    putStrLn "Daydream - Carlos Infante, Daniel Varela - 2018"
     if val 
-        then printTokList inv
+        then do
+            putStrLn $ (show $ length inv) ++ " lexical errors found:"
+            printTokList inv
+            if Lexer `elem` opts
+            then do
+                let ftoks = filter (not . undef) toks
+                putStrLn $ "Token lists:"
+                printTokList ftoks
+                ((p,(s,_,_)),w) <- runWriterT (runStateT (runExceptT (parseDdr ftoks)) initialState)
+                if Parser `elem` opts
+                    then do
+                        putStrLn $ (show $ length w) ++ " sintax errors found:"
+                        mapM_ putStrLn $ w
+                        reportRes' p
+                        if Table `elem` opts
+                            then putStrLn $ show s
+                            else putStrLn "OK"
+                    else do
+                        putStrLn $ (show $ length w) ++ " sintax errors found:"
+                        mapM_ putStrLn $ w
+                        reportRes p
+                        if Table `elem` opts
+                            then putStrLn $ show s
+                            else putStrLn "OK"
+            else do
+                let ftoks = filter (not . undef) toks
+                ((p,(s,_,_)),w) <- runWriterT (runStateT (runExceptT (parseDdr ftoks)) initialState)
+                if Parser `elem` opts
+                    then do
+                        putStrLn $ (show $ length w) ++ " sintax errors found:"
+                        mapM_ putStrLn $ map show w
+                        reportRes' p
+                        if Table `elem` opts
+                            then putStrLn $ show s
+                            else putStrLn "OK"
+                    else do
+                        putStrLn $ (show $ length w) ++ " sintax errors found:"
+                        mapM_ putStrLn $ w
+                        reportRes p
+                        if Table `elem` opts
+                            then putStrLn $ show s
+                            else putStrLn "OK"
         else if Lexer `elem` opts
             then do
+                putStrLn $ "Token lists:"
                 printTokList toks
+                ((p,(s,_,_)),w) <- runWriterT (runStateT (runExceptT (parseDdr toks)) initialState)
+                if Parser `elem` opts
+                    then do
+                        putStrLn $ (show $ length w) ++ " sintax errors found:"
+                        mapM_ putStrLn $ w
+                        reportRes' p
+                        if Table `elem` opts
+                            then putStrLn $ show s
+                            else putStrLn "OK"
+                    else do
+                        putStrLn $ (show $ length w) ++ " sintax errors found:"
+                        mapM_ putStrLn $ map show w
+                        reportRes p
+                        if Table `elem` opts
+                            then putStrLn $ show s
+                            else putStrLn "OK"
             else do
                 ((p,(s,_,_)),w) <- runWriterT (runStateT (runExceptT (parseDdr toks)) initialState)
                 if Parser `elem` opts
                     then do
+                        putStrLn $ (show $ length w) ++ " sintax errors found:"
+                        mapM_ putStrLn $ w
                         reportRes' p
-                        mapM_ putStrLn $ map show w
-                    else do
-                        reportRes p
-                        mapM_ putStrLn $ map show w
                         if Table `elem` opts
                             then putStrLn $ show s
-                            else putStrLn ""
-                
-                
+                            else putStrLn "OK"
+                    else do
+                        putStrLn $ (show $ length w) ++ " sintax errors found:"
+                        mapM_ putStrLn $ w
+                        reportRes p
+                        if Table `elem` opts
+                            then putStrLn $ show s
+                            else putStrLn "OK"
+
+
