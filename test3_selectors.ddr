@@ -1,0 +1,85 @@
+# Pruebas con selectores.
+
+# Uso correcto simple de un selector.
+if true then
+dream
+	print("True");
+wake else
+dream
+	print("False");
+wake
+
+Bool c;
+
+if c then
+dream
+	return true;
+wake else
+dream
+	return false;
+wake
+
+# Condiciones no boleanas.
+if (":D","D:") then
+dream
+	return ":D";
+wake else
+dream
+	return "D:";
+wake
+
+# Declaracion de variables dentro de la condicion.
+#if Int x then
+#dream
+ 	#x = 1;
+#wake else
+#dream
+	#x = 2;
+#wake
+
+# Tipos algebraicos en las condiciones.
+data Custom
+|:
+	Make( Int field1 );
+:| 
+
+Custom a = Make(0);
+
+if a then
+dream
+	return 'b';
+wake
+
+# Selectores case, uso correcto simple.
+Int t = 0;
+case t of 
+	0 dream
+		t = t + 1;
+	wake
+	1 dream
+		t = t - 1;
+	wake;
+
+# Comparaciones de tipos distintos.
+Bool f = true;
+case f of
+	[1,2,3] dream
+		print("stop");
+	wake
+	(true,false) dream
+		if f then
+		dream
+			print("go");
+		wake
+	wake
+	42.42 dream
+		continue;
+	wake
+	"Stringy string" dream
+		while f dream
+			print("press f to pay respects");
+		wake
+	wake 
+	( f && (f || f) ) dream
+		continue;
+	wake;

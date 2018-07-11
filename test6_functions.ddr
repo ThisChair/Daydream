@@ -1,0 +1,110 @@
+# Pruebas para funciones
+
+# Uso correcto simple de una funcion
+func (Int, Int -> Int) min(x,y)
+dream
+	if x < y then
+	dream
+		return x;
+	wake else
+	dream
+		return y;
+	wake
+wake
+
+#memento
+# Uso de simbolos desconocidos
+func (Int, Int -> Int) min2(x,y)
+dream 
+	if a < b then
+	dream
+		return x;
+	wake else
+	dream
+		return y;
+	wake
+wake
+#gbye
+
+#memento
+# Valor de retorno incorrecto (No funciona)
+func (Int -> Bool) even(x)
+dream
+	if (x % 2) == 0 then
+	dream
+		return "yes";
+	wake else
+	dream
+		return "no";
+	wake
+wake
+#gbye
+
+#memento
+# Uso incorrecto de los argumentos
+func (Bool, Bool -> Int) add(x,y)
+dream
+	return x + y;
+wake
+#gbye
+
+#memento
+# Declaracion de multiples funciones de misma firma y nombre
+func (Int) fun1(x)
+dream
+	return x;
+wake
+
+func (Int) fun1(x)
+dream
+	return x;
+wake
+#gbye
+
+# Llamadas a funciones.
+Int a = min(1,2); # min(x,y) existe, todo bien.
+#a = oof(1); # Error, oof(x,y) no existe.
+
+func (Int -> Int) oof(x)
+dream
+	return x;
+wake
+
+#Bool b = oof(42); # oof(x) existe, pero su tipo no coindice con 'b'
+
+# Y si pasamos la evaluacion de una funcion como parametro?
+a = min(min(1,2),min(3,4)); # No problemo
+
+# Probemos con tipos algebraicos
+
+#memento
+# Ahora declaremos dichos tipos
+data CustomA 
+|:
+	CustomAconstructor(Int field);
+:|
+
+data CustomB
+|:
+	CustomBconstructor(CustomA field);
+:|
+#gbye
+
+#memento
+# Declaracion de una funcion con tipos no declarados
+func (CustomA -> CustomB) fun(x)
+dream
+	CustomB customB = CustomBconstructor(x); # CustomBconstructor utiliza un CustomA
+	return customB;
+wake
+#gbye
+
+#memento
+# Finalmente, no hay funciones de primer orden
+func ((Int -> Int), [Int] -> [Int]) int_map(fun,list)
+dream
+	for Int n in list if true
+		n = fun(n);
+	return list;
+wake
+#gbye

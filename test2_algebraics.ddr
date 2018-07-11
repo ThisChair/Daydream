@@ -1,0 +1,92 @@
+# Pruebas con tipos algebraicos.
+
+# Declaracion de un tipo algebraico cualquiera simple.
+data NewTypeA
+|:
+	ConstructorA( Int atr1, Bool atr2 );
+	ConstructorB( Int atr1, Bool atr2, Bool atr3);
+:|
+
+# Declaracion de un tipo algebraico que use otros tipos algebraicos ya declarados.
+data  NewTypeB
+|: 
+	ConstructorA( NewTypeA atr1 );
+:| 
+
+#memento
+# Declaracion de un tipo algebraico que use otros tipos algebraicos sin declarar.
+data NewTypeC
+|:
+	ConstructorA( NewTypeE atr1 ); 
+:|
+
+# Declaracion de un tipo algebraico recursivo. (?).
+data NewTypeD
+|:
+	ConstructorA( NewTypeD atr1 );
+:|  
+#gbye
+
+# Declaracion de variables con tipos algebraicos.
+NewTypeA a = ConstructorA(10,true);
+NewTypeA b = ConstructorB(10,true,false);
+
+# Declaraciones con constructores incorrectos. (No funciona).
+NewTypeA c = ConstructorX("hola");
+
+# Declaraciones con argumentos a los constructores incorrectos.
+NewTypeA f = ConstructorA(10.0,"chao");
+
+# Asignaciones a tipos algebraicos del mismo tipo.
+a = b;
+
+# Declaracion de variables con tipos algebraicos inexistentes.
+#NewTypeE d = ConstructorA(10);
+
+# Asignaciones a tipos algebraicos de tipos distintos.
+NewTypeB e = ConstructorA(a);
+#e = a; # e es de tipo NewType2, a es de tipo NewType1.
+
+#memento
+# Dos tipos con los mismos constructores y atributos, son iguales?.
+data TwinA
+|: 
+	MakeTwin(Int twinid);
+:|
+
+data TwinB
+|:
+	MakeTwin(Int twinid);
+:|
+
+TwinA twin1 = MakeTwin(0);
+TwinB twin2 = MakeTwin(0);
+
+twin1 = twin2; # Nope
+#gbye
+# Ortogonalidad de los tipos algebraicos
+
+#|: Constructor(Int field) :| a;
+
+#memento
+# Dos tipos con estructura distinta pero nombres iguales, se puede?
+data Twin
+|: 
+	MakeTwin(Int name);
+:|
+
+data Twin
+|:
+	MakeBetterTwin(String name);
+	MakeTwinSecondname(String second_name);
+:|
+
+# No se permiten redeclarar tipos algebraicos, ni siquiera en alcances distintos.
+dream
+	data Twin
+	|:
+		MakeBetterTwin(String name);
+		MakeTwinSecondname(String second_name);
+	:|
+wake
+#gbye

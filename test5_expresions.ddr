@@ -1,0 +1,90 @@
+# Pruebas para expresiones
+
+# Operadores numericos
+Int a,b,c = 1,1,1;
+Float d,e,f = 1.0,1.0,1.0;
+
+# Sumas
+c = a + b; # Asignacion a entero de suma de enteros, OK
+d = e + f; # Asignacion a flotante de suma de flotantes, OK
+#c = a + e; # Asignacion a entero de suma de entero y flotante, NO
+d = a + b; # Asignación a flotante de suma de enteros, OK
+
+# Restas
+c = a - b; # Asignacion a entero de resta de enteros, OK
+d = e - f; # Asignacion a flotante de resta de flotantes, OK
+#c = a - e; # Asignacion a entero de resta de entero y flotante, NO
+d = a - b; # Asignacion a flotante de resta de enteros, OK
+
+# Multiplicacion
+c = a * b; # Asignacion a entero de multiplicacion de enteros, OK
+d = e * f; # Asignacion a flotante de multiplicacion de flotantes, OK
+#c = a * e; # Asignacion a entero de multiplicacion de entero y flotante, NO
+d = a * b; # Asignacion a flotante de multiplicacion de enteros, OK
+
+# Division (normal y entera)
+c = a / b; # Asignacion a entero de division de enteros, OK
+c = a // b; # Asignacion a entero de division entera de enteros, OK
+d = e / b; # Asignacion a flotante de division de flotantes, OK
+#d = e // f; # Asignacion a flotante de division entera entre flotanes. (Falta que reciba tambien flotantes)
+d = a // b; # Asignacion a flotante de division entera entre enteros, OK
+
+# Modulo
+c = a % b; # Asignacion a entero de modulo de enteros, OK
+d = a % b; # Asignacion a flotante de modulo de enteros. (Falta que reciba flotantes)
+#c = a % e; # Asignacion a entero de modulo de entero con flotante, NO
+
+# Potencia 
+c = a ** b; # Asignacion a entero de potencia de enteros, OK
+d = a ** b; # Asignacion a flotante de potencia de enteros, OK
+d = e ** f; # Asignacion a flotante de potencia de flotantes, OK
+
+# Conjuncion bitwise(&)
+c = a & b;
+
+# Disyuncion bitwise (|)
+c = a | b;
+
+# Negacion bitwise (~)
+c = ~a;
+
+# XOR bitwise (^)
+c = a ^ b;
+
+# Shifts logicos izquierda (>>) y derecha (<<)
+c = a >> b;
+c = a << b;	
+
+# Operadores booleanos
+Bool h;
+
+h = a < b;
+h = a > b;
+
+# Declaremos algunos tipos algebraicos para pruebas
+
+data CustomTypeA
+|:
+	Const(String field);
+:| 
+
+data CustomTypeB
+|:
+	Const(Int field);
+:| 
+
+CustomTypeA custom1,custom2;
+CustomTypeB custom3;
+
+# Estos operadores requieren tipos numericos
+#h = custom1 > custom2;
+#h = custom1 < custom2;
+#h = custom1 >= custom2;
+#h = custom1 <= custom2;
+
+# Mientras que estos operadores necesitan tipos comparables
+#h = custom1 == custom2;
+#h = custom1 /= custom2;
+
+# Y por supuesto, los operadores requieren que los tipos sean iguales
+#h = true == 1;

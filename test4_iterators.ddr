@@ -1,0 +1,35 @@
+# Pruebas con iteradores
+
+# Uso correcto simple de un iterador while
+Int x = 1;
+while x < 1000
+dream
+	x = x * 2;
+wake
+
+# La condicion de los iteradores debe ser booleana (No funciona)
+while "this is not a boolean condition"
+dream
+	x = x * 2;
+wake
+
+# Iteradores determinados
+
+# Uso correcto de un iterador determinado
+for Int i from 1 to 1000 with i * 2
+dream
+	x = x + i;
+wake
+
+# La variable de iteración debe ser entero, así como los rangos y el paso (No funciona)
+for Bool f from "cero" to "cien"
+	continue;
+
+# Se pueden iterar sobre colecciones
+[Int] l = [2,3,4,5];
+for Int n in l if n % 2 == 2
+	print(n);
+
+# Deberia estar restringido que el tipo de la coleccion sea el tipo de la variable iteradora (No funciona)
+for Int n in [false,false,false,false] if true
+	print(n);

@@ -1,0 +1,67 @@
+# Pruebas con tipos pritivimos.
+
+# Muchas de estas cosas ya las habiamos visto.
+
+# Asignaciones correctas simples para tipos escalares.
+Int a = 0;
+Float b = 0.0;
+Bool c, d = true, false;
+
+#memento
+# Asignaciones incorrectas simples para tipos escalares.
+dream
+	Int a = 0.0;
+	Float b = 0;
+	Bool c, d = 1, 0;
+wake
+#gbye
+
+# Asignaciones correctas simples para tipos coleccion.
+{Int:4} e = {1,2,3,4}; # Arreglos
+[Float] f = [1.0,2.0,3.0]; # Listas
+String g = "String"; # Strings
+(String,Int) i = ("Tupla bien fina",42); # Tuplas
+[Int:String] j = [0:"Cero",1:"Uno"]; # Diccionarios
+
+#memento
+# Asignaciones incorrectas simples para tipos coleccion.
+dream
+	{Int:2} e = {1,2,3,4}; # El tamano del arreglo asignado no corresponde al tamano del arreglo declarado
+	{Bool:2} e1 = {1,2}; # Ahora los tamanos de los arreglos corresponden pero no los tipos.
+	[Float] f = [true,true,false,false]; # Tipo asignado incorrecto.
+	String g = 'B'; # Un caracter no es una String.
+	(Int,Float,Int) i = (1.0,1,1.0);
+	[Int:String] j = [0:"Cero",1.0:"Uno but flotante"]; # Todas las llaves deben ser del mismo tipo.
+	[Int:String] j1 = [0.0:"Cero but flotante",1.0:"Uno but flotante"]; # Y coincidir con el tipo declarado.
+wake
+#gbye
+
+# Algunas cosas interesantes que comprobar.
+
+#memento
+# Una string es equivalente a una lista de caracteres.
+dream
+	String a = ['h','o','l','a']; # En la definicion del lenguaje estan descritas como equivalentes, pero aun no funciona.
+	String b = ["h","o","1","a"]; # Esta si realmente deberia dar error.
+wake
+#gbye
+
+# Declaraciones con tipos primitivos anidados arrojan el error donde corresponde.
+#{{{Int:2}:3}:3} int_array = {{{1,2},{3,4},{5,6}},{{1,2},{3,4},{true,6}},{{1,1},{2,2},{3,3}}}; # Error desde en el nivel mas profundo, para {Int:2}.
+#{{{Int:2}:3}:3} int_array1 = {{{1.0,2.0},{3.0,4.0},{5.0,6.0}},{{1.0,2.0},{3.0,4.0},{1.0,6.0}},{{1.0,1.0},{2.0,2.0},{3.0,3.0}}}; # Error para tipos distintos sin importar la profundidad.
+
+#[([(Int,Int):(String,Bool)],Float)] nested_tuple = [([(1.0,1):("a",true),(2.0,2):("b",false)],0.0),([(1.0,1):("a",true),(3.0,3):("b",false),(4.0,4):("c",true)],1.0)];
+# Arroja error debido a las tuplas que se estan usando como 'keys', no tienen el tipo adecuado.
+
+# Apuntadores.
+Int x = 20;
+#:Int> y = x; # Error de tipo.
+
+# Tipos coleccion con apuntadores.
+dream
+	:Int> a;
+	:Bool> b;
+	(:Int>,:Bool>) pointer_tuple = (a,b);
+wake
+
+a = a + a;
