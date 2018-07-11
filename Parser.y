@@ -123,11 +123,11 @@ In : SingleI ';'               { % return $1 }
 
 SingleI : IDeclaration         { % return $ Assign (assignType $1) $1 }
         | Assign               { % checkAssign $1 >>= (\t -> return $ Assign t $1) }
-        | return Exp           { % return $ Ret TypeError $2 }
+        | return Exp           { % return $ Ret TypeVoid $2 }
         | Print                { % return $ $1 }
         | PrintLn              { % return $ $1 }
-        | continue             { % return $ Continue TypeError }
-        | break                { % return $ Break TypeError }
+        | continue             { % return $ Continue TypeVoid }
+        | break                { % return $ Break TypeVoid }
 
 Print : print '(' Exp ')'      { % return $ Print TypeError $3 }
 
