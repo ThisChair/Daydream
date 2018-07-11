@@ -22,7 +22,8 @@ data Instruction =
     Continue Type                           |
     Break Type                              |
     Print Type Exp                          |
-    PrintLn Type Exp
+    PrintLn Type Exp                        |
+    IFCall Type FCall
     deriving (Show,Eq)
 
 data For = 

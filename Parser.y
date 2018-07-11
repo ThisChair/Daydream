@@ -123,11 +123,12 @@ In : SingleI ';'               { % return $1 }
 
 SingleI : IDeclaration         { % return $ Assign (assignType $1) $1 }
         | Assign               { % checkAssign $1 >>= (\t -> return $ Assign t $1) }
-        | return Exp           { % return $ Ret TypeVoid $2 }
+        | return Exp           { % checkInFun (tokenPos $1) >> (return $ Ret TypeVoid $2) }
         | Print                { % return $ $1 }
         | PrintLn              { % return $ $1 }
         | continue             { % return $ Continue TypeVoid }
         | break                { % return $ Break TypeVoid }
+        | FunCall              { % checkIFunCall $1 >>= (\x -> return $ IFCall x $1) }
 
 Print : print '(' Exp ')'      { % return $ Print TypeError $3 }
 
@@ -308,7 +309,9 @@ FunCall : id '(' Exps ')'      { % checkFunCall (tokenVal $1) $3 (tokenPos $1) >
 Function : FuncScope func '('ParRet ')' Block { % do { lift popS;
                                                        i <- lift getActualScope; 
                                                        (\((_,_),(_,n)) -> 
-                                                           insertIns (tokenVal n) i $6) $4; 
+                                                           insertIns (tokenVal n) i $6) $4;
+                                                       t <- mapM getType (fst $ snd $4); 
+                                                       (checkRetT (snd $ snd $4) $6 (map fst t)); 
                                                      }
                                               }
          | FuncScope func '(' ParNoRet ')' Block { % do { lift popS;

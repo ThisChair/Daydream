@@ -6,6 +6,7 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Writer.Lazy
 import Control.Monad.Trans.Class(lift)
+import Control.Monad.IO.Class(liftIO)
 import Control.Monad(zipWithM_,zipWithM)
 import Lexer
 import SyntaxTree
@@ -455,8 +456,47 @@ checkFunCall id pars (AlexPn _ i j) = do
     case t of 
         TypeError -> return TypeError
         TypeFunc args ret -> if ((P.map returnType pars) == args)
-            then (if (length ret == 1) then (return $ head ret) else (return $ TypeTuple ret))
+            then case ret of
+                [] -> return TypeVoid
+                [x] -> return x
+                _ -> return $ TypeTuple ret
             else do
                 lift $ lift $ tell [(showPos i j) ++ ": " ++ "Calling function " ++ id ++ " with pars of types " ++ (show (P.map returnType pars)) ++ " while expecting types " ++ (show args) ]
                 return TypeError
 
+checkIFunCall :: FCall -> ParseMonad Type
+checkIFunCall (FCall t id _)  = do   
+    case t of 
+        TypeError -> return TypeError
+        TypeVoid -> return TypeVoid
+        _ -> do            
+            let (AlexPn _ i j) = tokenPos id
+            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Function " ++ (tokenVal id) ++ " with return type " ++ (show t) ++ " where none expected." ]
+            return TypeError
+
+checkInFun :: AlexPosn -> ParseMonad ()
+checkInFun (AlexPn _ i j) = do
+    (_,s,_) <- lift get
+    case (P.filter (\x -> sCategory x == SFunc) s) of
+        [] -> lift $ lift $ tell [(showPos i j) ++ ": Return instruction outside function." ]
+        _ -> return ()
+
+checkRetT :: Token -> [Instruction] -> [Type] -> ParseMonad ()
+checkRetT id ins ts = zipWith3M_ checkTs (repeat id) (P.filter isRet ins) (repeat ts)
+
+checkTs :: Token -> Instruction -> [Type] -> ParseMonad ()
+checkTs id (Ret _ (ETup _ es)) ts = if ((P.map returnType es) == ts)
+    then return ()
+    else do
+        let (AlexPn _ i j) = tokenPos id
+        lift $ lift $ tell [(showPos i j) ++ ": Function " ++ (tokenVal id) ++ " expected return type " ++ (show ts) ++ " but got " ++ (show (P.map returnType es))]
+checkTs id (Ret _ e) ts = if ((returnType e) == (head ts))
+    then return ()
+    else do
+        let (AlexPn _ i j) = tokenPos id
+        lift $ lift $ tell [(showPos i j) ++ ": Function " ++ (tokenVal id) ++ " expected return type " ++ (show $ head ts) ++ " but got " ++ (show (returnType e))]
+        
+
+isRet :: Instruction -> Bool
+isRet (Ret _ _) = True
+isRet _ = False 
