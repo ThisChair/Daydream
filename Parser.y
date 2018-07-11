@@ -148,10 +148,9 @@ Algebraic : AlgScope data type '|:' Sums ':|'  { % do  {
                                                             lift popS;
                                                             j <- lift getActualScope;
                                                             redeclaredCheck (tokenVal $3) j (tokenPos $3);
-                                                            lift $ insertSymS (tokenVal $3) (SymScope j (TypeType,0) [("",i)] (tokenPos $3)); 
+                                                            lift $ insertSymS (tokenVal $3) (SymScope j (TypeType,0) [] (tokenPos $3)); 
                                                         }
                                                 }
-
 AlgScope : {- empty -}         { % lift $ do {i <- getScopeNumber; 
                                               pushS (StackEntry i SType Nothing []);
                                               addNumber } }
@@ -165,7 +164,7 @@ Sum : ConsScope type '(' Prods ')' ';'   { % do{
                                                     lift popS;
                                                     j <- lift getActualScope;
                                                     redeclaredCheck (tokenVal $2) j (tokenPos $2);
-                                                    lift $ insertSymS (tokenVal $2) (SymScope j (TypeType,0) [("",i)] (tokenPos $3)); 
+                                                    lift $ insertSymS (tokenVal $2) (SymScope j (TypeType,0) [] (tokenPos $3)); 
                                                } 
                                          }
     | ConsScope type '(' ')' ';'         { % lift  popS }
@@ -282,7 +281,7 @@ Exp : Exp '+' Exp              { % checkNumBin $1 $3 (tokenPos $2) >>= (\t -> re
     | Arr                      { % return $1 }
     | Dict                     { % return $1 }
     | Tup                      { % return $1 }
-    | FunCall                  { % return (EFCall TypeError $1) }
+    | FunCall                  { % return (EFCall (returnType $1) $1) }
     | Read                     { % return $1 }
     | Id '?'                   { % return (ERef TypeError $1) }
 
@@ -303,50 +302,78 @@ KV : KV ',' Exp ':' Exp        { % return $   (($3,$5) : $1)}
 Tup : '(' Exp ',' Exps ')'     { % checkTupType ($2:(reverse $4)) (tokenPos $1) >>= (\t -> return $ ETup t ($2 : (reverse $4))) }
 
 -- Funciones
-FunCall : id '(' Exps ')'      { % return (FCall TypeError $1 $3) }
-        | id '(' ')'           { % return (FCall TypeError $1 []) }
+FunCall : id '(' Exps ')'      { % checkFunCall (tokenVal $1) $3 (tokenPos $1) >>= (\x -> return $ FCall x $1 $3) }
+        | id '(' ')'           { % checkFunCall (tokenVal $1) [] (tokenPos $1) >>= (\x -> return $ FCall x $1 []) }
 
-Function : FuncScope func '('ParRet ')' Block { % lift $ do { popS;
-                                                              i <- getActualScope; 
-                                                              (\((_,_),(_,n)) -> 
-                                                                  insertSymS (tokenVal n) (SymScope i (TypeFunc [] [],0) [] (tokenPos n))) $4; 
-                                                            }
+Function : FuncScope func '('ParRet ')' Block { % do { lift popS;
+                                                       i <- lift getActualScope; 
+                                                       (\((_,_),(_,n)) -> 
+                                                           insertIns (tokenVal n) i $6) $4; 
+                                                     }
                                               }
-         | FuncScope func '(' ParNoRet ')' Block {  % lift $ do { popS;
-                                                                i <- getActualScope; 
-                                                                (\((_,_),(_,n)) -> 
-                                                                    insertSymS (tokenVal n) (SymScope i (TypeFunc [] [],0) [] (tokenPos n))) $4; 
-                                                                } 
-                                                 }
-         | FuncScope func '(' '->' Types ')' id '(' ')' Block {  }
-         | FuncScope func '(' ')' id '(' ')' Block           {  }
+         | FuncScope func '(' ParNoRet ')' Block { % do { lift popS;
+                                                       i <- lift getActualScope; 
+                                                       (\((_,_),(_,n)) -> 
+                                                           insertIns (tokenVal n) i $6) $4; 
+
+                                                     }
+                                              }
+         | FuncScope func '(' '->' AddFuncRet '(' ')' Block { % do { lift popS;
+                                                                  i <- lift getActualScope; 
+                                                                  insertIns (tokenVal $5) i $8;
+                                                                }
+                                                         }
+         | FuncScope func '(' ')' AddFunc '(' ')' Block  { % do { lift popS;
+                                                                  i <- lift getActualScope; 
+                                                                  insertIns (tokenVal $5) i $8;
+                                                                }
+                                                         }
+
+AddFuncRet : Types ')' id { % do { i <- lift getActualScope;
+                                   t <- mapM getType (reverse $1);
+                                   lift $ insertSymS (tokenVal $3) (SymScope i (TypeFunc [] (map fst t),0) [] (tokenPos $3));
+                                   return $3;
+                         } }
+
+AddFunc : id   { % do { i <- lift getActualScope;
+                        lift $ insertSymS (tokenVal $1) (SymScope i (TypeFunc [] [],0) [] (tokenPos $1));
+                        return $1;
+                         } }
+
+
 
 FuncScope : {- empty -}                    { % lift $ do {i <- getScopeNumber; 
                                                           pushS (StackEntry i SFunc Nothing []);
                                                           addNumber } }
 
 ParRet : Type Ret id          { % do { i <- lift getActualScope;
-                                       l <- return ((\((x,y),(z,n)) -> (($1 : x,$3 : y ),(z,n))) $2); 
+                                       l <- return ((\((x,y),(z,n)) -> (($1 : x,reverse ($3 : y) ),(z,n))) $2); 
                                        t <- mapM getType (fst $ fst l);
                                        zipWithM_ pervasiveCheck (map tokenVal (snd $ fst l)) (map tokenPos (snd $ fst l));
                                        zipWith3M_ redeclaredCheck (map tokenVal (snd $ fst l)) (repeat i) (map tokenPos (snd $ fst l));
                                        mapM_ searchTable (map typeString (fst $ snd l));
                                        lift $ zipWithM_ (\x y -> 
                                            insertSymS (tokenVal y) (SymScope i x [] (tokenPos y))) t (snd $ fst l);
+                                       funi <- lift $ peekScope 1;
+                                       outypes <- mapM getType (fst $ snd l);
+                                       lift $ (\((_,_),(_,tid)) -> 
+                                         insertSymS (tokenVal tid) (SymScope funi (TypeFunc (map fst t) (map fst outypes),0) [] (tokenPos tid))) l;
                                        return l; } }
 
 ParNoRet : Type NoRet id    { % do { i <- lift getActualScope;
-                                     l <- return ((\((x,y),(_,n)) -> 
-                                         (($1 : x,$3 : y ),([],n))) $2); 
+                                     l <- return ((\((x,y),(_,n)) -> (($1 : x,reverse($3 : y) ),([],n))) $2); 
                                      t <- mapM getType (fst $ fst l);
                                      zipWithM_ pervasiveCheck (map tokenVal (snd $ fst l)) (map tokenPos (snd $ fst l));
                                      zipWith3M_ redeclaredCheck (map tokenVal (snd $ fst l)) (repeat i) (map tokenPos (snd $ fst l));
                                      lift $ zipWithM_ (\x y -> 
                                          insertSymS (tokenVal y) (SymScope i x [] (tokenPos y))) t (snd $ fst l);
+                                     funi <- lift $ peekScope 1;
+                                     lift $ (\((_,_),(_,tid)) -> 
+                                       insertSymS (tokenVal tid) (SymScope funi (TypeFunc (map fst t) [],0) [] (tokenPos tid))) l;
                                      return l; } }
 
 Ret : ',' Type Ret id ','     { % return $ (\((x,y),(z,n)) -> (($2 : x,$4 : y ),(z,n))) $3  }
-    | '->' Types ')' id '('   { % return (([],[]),($2,$4)) }
+    | '->' Types ')' id '('   { % return (([],[]),(reverse $2,$4)) }
 
 NoRet : ',' Type NoRet id ',' { % return $ (\((x,y),(_,n)) -> (($2 : x,$4 : y),([],n))) $3 }
       | ')' id '('            { % return (([],[]),([],$2)) }

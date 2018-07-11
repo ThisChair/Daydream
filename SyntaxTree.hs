@@ -23,7 +23,7 @@ data Instruction =
     Break Type                              |
     Print Type Exp                          |
     PrintLn Type Exp
-    deriving (Show)
+    deriving (Show,Eq)
 
 data For = 
     FromTo       Type Exp Exp Instruction         |
@@ -31,20 +31,20 @@ data For =
     FromToWithIf Type Exp Exp Exp Exp Instruction |
     FromToWith   Type Exp Exp Exp Instruction     |
     InIf         Type Exp Exp Instruction
-    deriving (Show)
+    deriving (Show,Eq)
 
-data Member = Member TypeName Token deriving (Show)
+data Member = Member TypeName Token deriving (Show,Eq)
 
-data Constructor = Constructor Token [Member] deriving (Show)
+data Constructor = Constructor Token [Member] deriving (Show,Eq)
 
 data RightValue =
     ValueExp Exp   |
     ValueCons CCall
-    deriving (Show)
+    deriving (Show,Eq)
 
-data CCall = CCall Token [Exp] deriving (Show)
+data CCall = CCall Token [Exp] deriving (Show,Eq)
 
-data DataType = DataType Token [Constructor] deriving (Show)
+data DataType = DataType Token [Constructor] deriving (Show,Eq)
 
 typeString :: TypeName -> String
 typeString (Name _ s) = s
@@ -61,7 +61,7 @@ data TypeName =
     Tuple Type [TypeName]         |
     Dict Type (TypeName,TypeName) |
     Pointer Type TypeName 
-    deriving (Show)
+    deriving (Show,Eq)
 
 idString :: Identifier -> String
 idString (Variable _ (s,_,_)) = s
@@ -77,7 +77,7 @@ data Identifier =
     Variable Type (String,Integer,AlexPosn) |
     Index Type Identifier Exp               |
     MemberCall Type Identifier [Token]
-    deriving (Show) 
+    deriving (Show,Eq) 
 
 data Exp = 
     ESum    Type Exp Exp     |
@@ -112,9 +112,9 @@ data Exp =
     EIdent  Type Identifier  |
     Read    Type             |
     ERef    Type Identifier
-    deriving (Show)
+    deriving (Show,Eq)
 
-data FCall = FCall Type Token [Exp] deriving (Show)
+data FCall = FCall Type Token [Exp] deriving (Show,Eq)
 
 data Type = TypeInt                |
             TypeFloat              |

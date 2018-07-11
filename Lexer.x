@@ -10,7 +10,7 @@ $print = $printable # [\\\"]
 tokens :-
     $white+                 ; -- Ignore whitespaces
     \#.*\n                  ; -- Ignore one line comments
-    \#dream(.*\n*)*\#wake   ; -- Ignore multi line comments
+    \#memento(.*\n*)*\#gbye ; -- Ignore multi line comments
     -- Reserved words
     dream                   { (\p s -> TDream    p) }
     read                    { (\p s -> TRead     p) }

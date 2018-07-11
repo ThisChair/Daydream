@@ -14,7 +14,7 @@ type SymTable = Map String (Map Integer SymScope)    -- Tabla de simbolos, una t
 
 data SymScope = SymScope { scope    :: Integer
                          , typeS    :: (Type,Integer)
-                         , otherS   :: [(String,Integer)]
+                         , otherS   :: [Instruction]
                          , pos      :: AlexPosn  } deriving (Show, Eq)
 
 readType :: String -> Type
@@ -118,6 +118,11 @@ getActualScope = do
     (_,(s:_),_) <- get
     return (actualScope s)
 
+peekScope :: Monad m => Int -> StateT ScopeStack m Integer
+peekScope n = do
+    (_,s,_) <- get
+    return $ actualScope (s !! n)
+
 addNumber :: Monad m => StateT ScopeStack m ()
 addNumber = modify addScopeNumber
 
@@ -129,6 +134,15 @@ popS = modify $ modifyStack $ pop
 
 insertSymS :: Monad m => String -> SymScope -> StateT ScopeStack m ()
 insertSymS elem elemScope = modify . modifySymTable $ insertSym elem elemScope
+
+
+insertIns :: String -> Integer -> [Instruction] -> ParseMonad ()
+insertIns id s ins = lift $ modify . modifySymTable $ updateIns id s ins
+
+updateIns :: String -> Integer -> [Instruction] -> SymTable -> SymTable
+updateIns id s newins sym = case (M.lookup id sym >>= (\x -> M.lookup s x)) of
+    Just (SymScope i (TypeFunc intype outype,_) ins pos) -> insertSym id (SymScope i (TypeFunc intype outype,0) (ins++newins) pos) sym
+
 
 searchTable :: String -> ParseMonad (String,Integer,AlexPosn)
 searchTable id = do
@@ -434,3 +448,15 @@ checkSingle (Variable t (id,_,(AlexPn _ i j))) (ValueExp e) = case (t,returnType
             lift $ lift $ tell [(showPos i j) ++ ": " ++ "Variable " ++ id ++ " of type " ++ (show t) ++ " can't be assigned with type " ++ (show te)]
             return TypeError
 checkSingle _ _ = return TypeError
+
+checkFunCall :: String -> [Exp] -> AlexPosn -> ParseMonad Type
+checkFunCall id pars (AlexPn _ i j) = do
+    (_,t) <- (searchTable' id)    
+    case t of 
+        TypeError -> return TypeError
+        TypeFunc args ret -> if ((P.map returnType pars) == args)
+            then (if (length ret == 1) then (return $ head ret) else (return $ TypeTuple ret))
+            else do
+                lift $ lift $ tell [(showPos i j) ++ ": " ++ "Calling function " ++ id ++ " with pars of types " ++ (show (P.map returnType pars)) ++ " while expecting types " ++ (show args) ]
+                return TypeError
+
