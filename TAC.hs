@@ -91,8 +91,6 @@ snd' (_,b,_) = b
 trd' :: (a,b,c) -> c
 trd' (_,_,c) = c
 
-
-
 -- Retorna un nuevo nombre temporal
 genNewTemp :: State (Int,Int,String,String) String
 genNewTemp = state $ \(temp_counter,label_counter,true_code,false_code) -> ('t' : (show $ temp_counter+1),(temp_counter+1,label_counter,true_code,false_code))
@@ -218,15 +216,15 @@ genRelBinOpTAC symtable rel_bin_op exp1 exp2 = do
     newlabel <- genNewTemp
     t_jump <- genNewLabel
     f_jump <- genNewLabel
-    exp1TAC <- toTAC symtable exp1 
-    exp2TAC <- toTAC symtable exp2
+    leftTAC <- toTAC symtable exp1 
+    rightTAC <- toTAC symtable exp2
     nextcode' <- genNewLabel
-    let subTAC = exp2TAC ++ exp1TAC
+    let subTAC = rightTAC ++ leftTAC
         labelcode = genLabelCode nextcode'
-        cond = createQuadruplet rel_bin_op (getLatestTemp exp1TAC) (getLatestTemp exp2TAC) "" "" 0
+        c = createQuadruplet rel_bin_op (getLatestTemp leftTAC) (getLatestTemp rightTAC) "" "" 0
         true_code = [labelcode,createQuadruplet OAssign "1" "" newlabel t_jump 0]
         false_code = [labelcode,createQuadruplet OAssign "0" "" newlabel f_jump 0]
-        newTAC = createIfRegister cond t_jump true_code f_jump false_code newlabel nextcode
+        newTAC = createIfRegister c t_jump true_code f_jump false_code newlabel nextcode
         in return (newTAC : subTAC)
 
 -- Funcion generica que genera TAC para cualquier operador unario
@@ -239,9 +237,19 @@ genUnOpTAC symtable un_op exp = do
         in return (newTAC : expTAC)
 
 -- Funcion generica que genera TAC de control de flujo para cualquier operador relacional binario
-{-toTACFlow :: (TAC_convertible a) => SymTable -> Operator -> a -> a -> State (Int,Int,String,String) [TAC]
-toTACFlow symtable rel_bin_op exp1 exp2 = do
--}
+genFlowRelBinOPTAC :: (TAC_convertible a) => SymTable -> Operator -> a -> a -> State (Int,Int,String,String) [TAC]
+genFlowRelBinOPTAC symtable rel_bin_op exp1 exp2 = do
+    t_jump <- getTrueCode
+    f_jump <- getFalseCode
+    leftTAC <- toTAC symtable exp1
+    rightTAC <- toTAC symtable exp2
+    let subTAC = rightTAC ++ leftTAC
+        id1 = getLatestTemp leftTAC
+        id2 = getLatestTemp rightTAC
+        c = createQuadruplet rel_bin_op id1 id2 "" "" 0
+        noop = [createQuadruplet ONone "" "" "" "" 0]
+        newTAC = createIfRegister c t_jump noop f_jump noop "" ""
+        in return (newTAC : subTAC)
 
 ----------------------------------------------------------------------------
 ----------------------------------------------------------------------------
@@ -287,10 +295,11 @@ instance TAC_convertible Instruction where
         insTAC <- toTAC symtable ins
         setTrueCode exp_t_jump
         setFalseCode nextcode
-        expTAC <- toTAC symtable exp
+        expTAC <- toTACFlow symtable exp
         nextcode' <- getCurrentLabel
-        let newTAC = createIfRegister (head expTAC) exp_t_jump insTAC nextcode' [createQuadruplet ONone "" "" "" "" 0] "" nextcode
-            in return (newTAC : expTAC)
+        let c = (cond . head) expTAC
+            newTAC = [createIfRegister c exp_t_jump insTAC nextcode' [createQuadruplet ONone "" "" "" "" 0] "" nextcode]
+            in return newTAC
 
 -- Expresiones
 instance TAC_convertible Exp where
@@ -307,15 +316,17 @@ instance TAC_convertible Exp where
     toTAC symtable (EBitOr _ exp1 exp2 ) = genBinOpTAC symtable OBitOr exp1 exp2
     toTAC symtable (EBitAnd _ exp1 exp2 ) = genBinOpTAC symtable OBitAnd exp1 exp2
     toTAC symtable (EBitXor _ exp1 exp2 ) = genBinOpTAC symtable OBitXor exp1 exp2
-    toTAC symtable (EOr _ exp1 exp2 ) = genRelBinOpTAC symtable OOr exp1 exp2
-    toTAC symtable (EAnd _ exp1 exp2 ) = genRelBinOpTAC symtable OAnd exp1 exp2
+    toTAC symtable (EOr _ exp1 exp2 ) = genBinOpTAC symtable OOr exp1 exp2
+    toTAC symtable (EAnd _ exp1 exp2 ) = genBinOpTAC symtable OAnd exp1 exp2
+
+    -- Booleanas relacionales aritmeticas
     toTAC symtable (EGEq _ exp1 exp2 ) = genRelBinOpTAC symtable OGEq exp1 exp2
     toTAC symtable (EGreat _ exp1 exp2 ) = genRelBinOpTAC symtable OGreat exp1 exp2
     toTAC symtable (ELEq _ exp1 exp2 ) = genRelBinOpTAC symtable OLEq exp1 exp2
     toTAC symtable (ELess _ exp1 exp2 ) = genRelBinOpTAC symtable OLess exp1 exp2
     toTAC symtable (ENEq _ exp1 exp2 ) = genRelBinOpTAC symtable ONEq exp1 exp2
     toTAC symtable (EEqual _ exp1 exp2 ) = genRelBinOpTAC symtable OEqual exp1 exp2
-    
+
     -- Unarias
     toTAC symtable (ENeg _ exp ) = genUnOpTAC symtable ONeg exp
     toTAC symtable (ENot _ exp ) = genUnOpTAC symtable ONot exp 
@@ -335,6 +346,19 @@ instance TAC_convertible Exp where
     toTAC symtable (EIdent _ id) = do
         idTAC <- toTAC symtable id
         return idTAC
+
+    -- Control de flujo
+toTACFlow :: SymTable -> Exp -> State (Int,Int,String,String) [TAC]
+    -- Booleanas relacionales
+toTACFlow symtable (EGEq _ exp1 exp2) = genFlowRelBinOPTAC symtable OGEq exp1 exp2
+toTACFlow symtable (EGreat _ exp1 exp2) = genFlowRelBinOPTAC symtable OGreat exp1 exp2
+toTACFlow symtable (ELEq _ exp1 exp2) = genFlowRelBinOPTAC symtable OLEq exp1 exp2
+toTACFlow symtable (ELess _ exp1 exp2) = genFlowRelBinOPTAC symtable OLess exp1 exp2
+toTACFlow symtable (ENEq _ exp1 exp2) = genFlowRelBinOPTAC symtable ONEq exp1 exp2
+toTACFlow symtable (EEqual _ exp1 exp2) = genFlowRelBinOPTAC symtable OEqual exp1 exp2
+
+    -- Booleanas
+toTACFlow symtable (EOr _ exp1 exp2) = 
 
 -- Identificadores
 instance TAC_convertible Identifier where
