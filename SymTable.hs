@@ -10,12 +10,12 @@ import Control.Monad(zipWithM_,zipWithM)
 import Lexer
 import SyntaxTree
 
-type SymTable = Map String (Map Integer SymScope)    -- Tabla de simbolos, una tabla de hash de listas de alcances, indexadas por nombre.
+type SymTable = Map String (Map Integer SymScope) -- Tabla de simbolos, una tabla de hash de listas de alcances, indexadas por nombre.
 
 data SymScope = SymScope { scope    :: Integer
                          , typeS    :: (Type,Integer)
                          , otherS   :: [Instruction]
-                         , pos      :: AlexPosn  } deriving (Show, Eq)
+                         , pos      :: AlexPosn  } deriving (Show, Eq, Read)
 
 readType :: String -> Type
 readType "Int" = TypeInt
@@ -93,6 +93,7 @@ scopeZero = [
     ("_dict", (SymScope 0 (TypeType,0) [] noPos)),
     ("_ptr",  (SymScope 0 (TypeType,0) [] noPos))
     ]
+    
 scopeOne :: [(String,SymScope)]
 scopeOne = []
 

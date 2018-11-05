@@ -10,11 +10,13 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Writer.Lazy
 import SymTable
+import TAC
 
 data Flag =
     Lexer  |
     Parser |
     Table  |
+    Intermediate |
     Help
     deriving (Eq,Ord,Enum,Show,Bounded)
 
@@ -22,6 +24,7 @@ flags =
     [Option ['l'] ["lexer"]  (NoArg Lexer)  "Runs only the lexical analyzer and prints the token list."
     ,Option ['p'] ["parser"] (NoArg Parser) "Runs the syntax analyzer and prints the syntax tree."
     ,Option ['t'] ["table"]  (NoArg Table)  "Runs the syntax analyzer and prints the symtable."
+    ,Option ['i'] ["intermediate"] (NoArg Intermediate) "Runs the syntax analyser, then the intermediate code generator and prints the generated Three-Address Code."  
     ,Option ['h'] ["help"]   (NoArg Help)   "Prints this help message."
     ]
 
@@ -56,6 +59,9 @@ filePath (x:_) = case reverse x of
     (y:_) -> do
         hPutStrLn stderr "Wrong file format (must be .ddr)."
         exitWith (ExitFailure 1)
+
+unwrapTree :: Either String a -> IO a
+unwrapTree (Right t) = return t
 
 printTokList :: [Token] -> IO()
 printTokList list = mapM_ putStrLn $ map show list
@@ -148,7 +154,13 @@ main = do
                         mapM_ putStrLn $ w
                         reportRes' p
                         if Table `elem` opts
-                            then putStrLn $ show s
+                            then do
+                                putStrLn $ show s
+                                if Intermediate `elem` opts
+                                    then do
+                                        syntaxtree <- unwrapTree p
+                                        printTAC (evalState (toTAC s syntaxtree) (0,0,"",""))
+                                    else putStrLn "OK"
                             else putStrLn "OK"
                     else do
                         putStrLn $ (show $ length w) ++ " sintax errors found:"
@@ -156,6 +168,11 @@ main = do
                         reportRes p
                         if Table `elem` opts
                             then putStrLn $ show s
-                            else putStrLn "OK"
+                            else if Intermediate `elem`opts
+                                then do
+                                    syntaxtree <- unwrapTree p
+                                    printTAC (evalState (toTAC s syntaxtree) (0,0,"",""))
+                                else putStrLn "OK"
+
 
 

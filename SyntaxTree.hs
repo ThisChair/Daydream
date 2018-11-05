@@ -23,7 +23,7 @@ data Instruction =
     Break Type                              |
     Print Type Exp                          |
     PrintLn Type Exp
-    deriving (Show,Eq)
+    deriving (Show,Eq,Read)
 
 data For = 
     FromTo       Type Exp Exp Instruction         |
@@ -31,20 +31,20 @@ data For =
     FromToWithIf Type Exp Exp Exp Exp Instruction |
     FromToWith   Type Exp Exp Exp Instruction     |
     InIf         Type Exp Exp Instruction
-    deriving (Show,Eq)
+    deriving (Show,Eq,Read)
 
-data Member = Member TypeName Token deriving (Show,Eq)
+data Member = Member TypeName Token deriving (Show,Eq,Read)
 
-data Constructor = Constructor Token [Member] deriving (Show,Eq)
+data Constructor = Constructor Token [Member] deriving (Show,Eq,Read)
 
 data RightValue =
     ValueExp Exp   |
     ValueCons CCall
-    deriving (Show,Eq)
+    deriving (Show,Eq,Read)
 
-data CCall = CCall Token [Exp] deriving (Show,Eq)
+data CCall = CCall Token [Exp] deriving (Show,Eq,Read)
 
-data DataType = DataType Token [Constructor] deriving (Show,Eq)
+data DataType = DataType Token [Constructor] deriving (Show,Eq,Read)
 
 typeString :: TypeName -> String
 typeString (Name _ s) = s
@@ -61,7 +61,7 @@ data TypeName =
     Tuple Type [TypeName]         |
     Dict Type (TypeName,TypeName) |
     Pointer Type TypeName 
-    deriving (Show,Eq)
+    deriving (Show,Eq,Read)
 
 idString :: Identifier -> String
 idString (Variable _ (s,_,_)) = s
@@ -77,7 +77,7 @@ data Identifier =
     Variable Type (String,Integer,AlexPosn) |
     Index Type Identifier Exp               |
     MemberCall Type Identifier [Token]
-    deriving (Show,Eq) 
+    deriving (Show,Eq,Read) 
 
 data Exp = 
     ESum    Type Exp Exp     |
@@ -112,9 +112,9 @@ data Exp =
     EIdent  Type Identifier  |
     Read    Type             |
     ERef    Type Identifier
-    deriving (Show,Eq)
+    deriving (Show,Eq,Read)
 
-data FCall = FCall Type Token [Exp] deriving (Show,Eq)
+data FCall = FCall Type Token [Exp] deriving (Show,Eq,Read)
 
 data Type = TypeInt                |
             TypeFloat              |
@@ -131,9 +131,9 @@ data Type = TypeInt                |
             TypeFunc [Type] [Type] |
             TypePointer Type       |
             TypeData String
-            deriving (Eq)
+            deriving (Eq,Read,Show)
 
-instance Show Type where
+{-instance Show Type where
     show TypeInt = "Int"
     show TypeFloat = "Float"
     show TypeBool = "Bool"
@@ -141,14 +141,14 @@ instance Show Type where
     show TypeString = "String"
     show TypeVoid = "Void"
     show TypeError = "Type Error"
-    show TypeType = "Type"
+    show TypeType = "Type Type"
     show (TypeArray t n) = "Array of " ++ (show t) ++ " of size " ++ n
     show (TypeList t) = "List of " ++ (show t)
     show (TypeDict k v) = "Dictionary of pairs (" ++ (show k) ++ ", " ++ (show v) ++ ")"
     show (TypeTuple t) = "Tuple of: " ++ (show t)
     show (TypeFunc a r) = "Function from " ++ (show a) ++ " to " ++ (show r)
     show (TypePointer t) = "Pointer of " ++ (show t)
-    show (TypeData s) = s
+    show (TypeData s) = s-}
 
 -- Funciones para retorno de tipos -- 
 

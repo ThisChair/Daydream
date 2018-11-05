@@ -1,4 +1,6 @@
 {
+{-# LANGUAGE StandaloneDeriving #-}
+
 module Lexer where
 }
 
@@ -90,8 +92,8 @@ tokens :-
                             { (\p s -> TChar p s) }
     .                       {TUndef}
 
-
 {
+deriving instance Read AlexPosn
 
 data Token =
     TDream      { tokenPos :: AlexPosn }                     |
@@ -167,7 +169,7 @@ data Token =
     TString     { tokenPos :: AlexPosn, tokenVal :: String } |
     TChar       { tokenPos :: AlexPosn, tokenVal :: String } |
     TUndef      { tokenPos :: AlexPosn, tokenVal :: String }
-    deriving (Eq)
+    deriving (Eq,Read)
 
 instance Show Token where
     show (TDream    (AlexPn _ i j)) = (showPos i j) ++ " - Reserved word: \'dream\'"
@@ -248,3 +250,4 @@ showPos :: Int -> Int -> String
 showPos 0 0 = ""
 showPos i j = "Row " ++ show i ++ ", Column " ++ show j
 }
+
