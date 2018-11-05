@@ -1,13 +1,23 @@
 {
+{-|
+Module : Parser
+Authors : Carlos Infante
+          Daniel Varela
+
+Parser for the language. Type checking is also done here.
+-}
 module Parser where
-import Lexer
+
 import Control.Monad.Trans.Except
-import SyntaxTree
-import SymTable
 import Control.Monad.Trans.State.Strict
 import Control.Monad.IO.Class(liftIO)
 import Control.Monad.Trans.Class(lift)
 import Control.Monad(zipWithM_,zipWithM)
+
+import Lexer
+import SyntaxTree
+import SymTable
+import Utils
 }
 %monad { ParseMonad }
 %name parseDdr

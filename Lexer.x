@@ -1,7 +1,17 @@
 {
 {-# LANGUAGE StandaloneDeriving #-}
+{-|
+Module : Lexer
+Authors : Carlos Infante
+          Daniel Varela
+
+Lexer module for Daydream language.
+-}
 
 module Lexer where
+
+import Utils
+
 }
 
 %wrapper "posn"
@@ -10,9 +20,16 @@ $digit = 0-9			-- digits
 $print = $printable # [\\\"]
 
 tokens :-
-    $white+                 ; -- Ignore whitespaces
-    \#.*\n                  ; -- Ignore one line comments
-    \#memento(.*\n*)*\#gbye ; -- Ignore multi line comments
+
+    -- Ignore whitespaces
+    $white+                 ;
+
+    -- Ignore one line comments
+    \#.*\n                  ;
+
+    -- Ignore multi line comments
+    \#memento(.*\n*)*\#gbye ;
+
     -- Reserved words
     dream                   { (\p s -> TDream    p) }
     read                    { (\p s -> TRead     p) }
@@ -40,6 +57,7 @@ tokens :-
     malloc                  { (\p s -> TMalloc   p) }
     free                    { (\p s -> TFree     p) }
     len                     { (\p s -> TLen      p) }
+
     -- Symbols
     \$                      { (\p s -> TDeref   p) }
     \+\+                    { (\p s -> TConcat  p) }
@@ -80,6 +98,7 @@ tokens :-
     \.                      { (\p s -> TPoint   p) }
     \?                      { (\p s -> TRef     p) }
     \-\>                    { (\p s -> TArrow   p) }
+
     -- Literals
     true                    { (\p s -> TTrue  p) }
     false                   { (\p s -> TFalse p) }
@@ -91,6 +110,7 @@ tokens :-
     \'($print | (\\\\) | (\\n) | (\\\"))\'
                             { (\p s -> TChar p s) }
     .                       {TUndef}
+
 
 {
 deriving instance Read AlexPosn
@@ -246,8 +266,4 @@ instance Show Token where
     show (TChar     (AlexPn _ i j) s) = (showPos i j) ++ " - Char: \'" ++ s ++ "\'"
     show (TUndef    (AlexPn _ i j) s) = (showPos i j) ++ " - Unexpected token: " ++ s
 
-showPos :: Int -> Int -> String
-showPos 0 0 = ""
-showPos i j = "Row " ++ show i ++ ", Column " ++ show j
 }
-

@@ -1,51 +1,124 @@
+{-|
+Module : SyntaxTree
+Authors : Carlos Infante
+          Daniel Varela
+
+Functions and definitions relevant to the construction and manipulation
+of the abstract syntax tree.
+-}
 module SyntaxTree where
-import Lexer
+
 import Data.List (nub)
 
+import Lexer
+import Utils
+
 class AST a where
+    -- | Returns the type of the node.
     returnType :: a -> Type
 
-data Init = Init Type Module [Import] [Instruction] deriving (Show)
+-- Abstract syntax tree nodes definition.
 
-data Module = Module Type Token | Main Type deriving (Show)
+data Init
+    -- | Root of the tree.
+    = Init Type Module [Import] [Instruction]
+    deriving (Show)
 
-data Import = Import Type Token deriving (Show)
+data Module
+    -- | Module name definition.
+    = Module Type Token 
+    -- | If no module name present, then it is Main.
+    | Main Type
+    deriving (Show)
 
-data Instruction = 
-    Block Type [Instruction]                |
-    Assign Type ([Identifier],[RightValue]) |
-    IfThen Type Exp Instruction             |
-    IfElse Type Exp Instruction Instruction |
-    While Type Exp Instruction              |
-    Det Type For                            |
-    Ret Type Exp                            |
-    Continue Type                           |
-    Break Type                              |
-    Print Type Exp                          |
-    PrintLn Type Exp
-    deriving (Show,Eq,Read)
+data Import
+    -- | All imports.
+    = Import Type Token
+    deriving (Show)
 
-data For = 
-    FromTo       Type Exp Exp Instruction         |
-    FromToIf     Type Exp Exp Exp Instruction     |
-    FromToWithIf Type Exp Exp Exp Exp Instruction |
-    FromToWith   Type Exp Exp Exp Instruction     |
-    InIf         Type Exp Exp Instruction
-    deriving (Show,Eq,Read)
+data Instruction
+    -- | Instruction blocks.
+    = Block Type [Instruction]
+    -- | Assigns.
+    | Assign Type ([Identifier],[RightValue])
+    -- | If-Then instruction.
+    | IfThen Type Exp Instruction
+    -- | If-Then-Else instruction.
+    | IfElse Type Exp Instruction Instruction
+    -- | Undefined iterator While instruction.
+    | While Type Exp Instruction
+    -- | Determined iterator For instructions.
+    | Det Type For
+    -- | Return instruction.
+    | Ret Type Exp
+    -- | Continue instruction.
+    | Continue Type
+    -- | Break instruction.
+    | Break Type
+    -- | Print instruction.
+    | Print Type Exp
+    -- | PrintLn instruction.
+    | PrintLn Type Exp
+    -- | Function call instruction.
+    | IFCall Type FCall
+    deriving (Show,Eq)
 
-data Member = Member TypeName Token deriving (Show,Eq,Read)
+data For
+    -- | For-From-To instruction.
+    = FromTo Type Exp Exp Instruction
+    -- | For-From-To-If instruction.
+    | FromToIf Type Exp Exp Exp Instruction
+    -- | For-From-To-With-If instruction.
+    | FromToWithIf Type Exp Exp Exp Exp Instruction
+    -- | For-From-To-With instruction.
+    | FromToWith Type Exp Exp Exp Instruction
+    -- | For-In-If instruction.
+    | InIf Type Exp Exp Instruction
+    deriving (Show,Eq)
 
-data Constructor = Constructor Token [Member] deriving (Show,Eq,Read)
+data Member
+    -- | Member of a structured type.
+    = Member TypeName Token
+    deriving (Show,Eq)
 
-data RightValue =
-    ValueExp Exp   |
-    ValueCons CCall
-    deriving (Show,Eq,Read)
+data Constructor    
+    -- | Type constructor.
+    = Constructor Token [Member]
+    deriving (Show,Eq)
 
-data CCall = CCall Token [Exp] deriving (Show,Eq,Read)
+data RightValue
+    -- | Expression as a right value.
+    = ValueExp Exp
+    -- | Type constructor call as a right value.
+    | ValueCons CCall
+    deriving (Show,Eq)
 
-data DataType = DataType Token [Constructor] deriving (Show,Eq,Read)
+data CCall
+    -- | Type constructor call.
+    = CCall Token [Exp]
+    deriving (Show,Eq)
 
+data DataType
+    -- | Structured data types.
+    = DataType Token [Constructor]
+    deriving (Show,Eq)
+
+data TypeName
+    -- | Basic or structured type.
+    = Name Type String
+    -- | Array with its type and size.
+    | Array Type TypeName Token
+    -- | List with its type.
+    | List Type TypeName
+    -- | Tuple with its types.
+    | Tuple Type [TypeName]
+    -- | Dictionary with its first and second type.
+    | Dict Type (TypeName,TypeName)
+    -- | Pointer with its type.
+    | Pointer Type TypeName
+    deriving (Show,Eq)
+
+-- | Type name as a string for symtable.
 typeString :: TypeName -> String
 typeString (Name _ s) = s
 typeString (List _ _) = "_list"
@@ -54,67 +127,100 @@ typeString (Tuple _ _) = "_tuple"
 typeString (Dict _ _) = "_dict"
 typeString (Pointer _ _) = "_pointer"
 
-data TypeName =
-    Name Type String              |
-    Array Type TypeName Token     |
-    List Type TypeName            |
-    Tuple Type [TypeName]         |
-    Dict Type (TypeName,TypeName) |
-    Pointer Type TypeName 
-    deriving (Show,Eq,Read)
+data Identifier
+    -- | Variable name, scope and position.
+    = Variable Type (String,Integer,AlexPosn)
+    -- | Index operation over an identifier.
+    | Index Type Identifier Exp
+    -- | Member call over an identifier.
+    | MemberCall Type Identifier [Token]
+    deriving (Show,Eq)
 
+-- | Returns the name of an identifier.
 idString :: Identifier -> String
 idString (Variable _ (s,_,_)) = s
 idString (Index _ id _) = idString id
 idString (MemberCall _ id _) = idString id
 
+-- | Returns the position of an identifier.
 idPos :: Identifier -> AlexPosn
 idPos (Variable _ (_,_,p)) = p
 idPos (Index _ id _) = idPos id
 idPos (MemberCall _ id _) = idPos id
 
-data Identifier = 
-    Variable Type (String,Integer,AlexPosn) |
-    Index Type Identifier Exp               |
-    MemberCall Type Identifier [Token]
-    deriving (Show,Eq,Read) 
+data Exp
+    -- | Sum between two expressions.
+    = ESum Type Exp Exp
+    -- | Difference between two expressions.
+    | EDif Type Exp Exp
+    -- | Multiplication between two expressions.
+    | EMul Type Exp Exp
+    -- | Division between two expressions.
+    | EDiv Type Exp Exp
+    -- | Module between two expressions.
+    | EMod Type Exp Exp
+    -- | Power between two expressions.
+    | EPot Type Exp Exp
+    -- | Integer division between two expressions.
+    | EDivE Type Exp Exp
+    -- | Left shift between two expressions.
+    | ELShift Type Exp Exp
+    -- | Right shift between two expressions.
+    | ERShift Type Exp Exp
+    -- | Bitwise or between two expressions.
+    | EBitOr  Type Exp Exp
+    -- | Bitwise and between two expressions.
+    | EBitAnd Type Exp Exp
+    -- | Bitwise exclusive or between two expressions.
+    | EBitXor Type Exp Exp
+    -- | Logic or between two expressions.
+    | EOr Type Exp Exp
+    -- | Logic and between two expressions.
+    | EAnd Type Exp Exp
+    -- | Greater or equal than between two expressions.
+    | EGEq Type Exp Exp
+    -- | Greater than between two expressions.
+    | EGreat Type Exp Exp
+    -- | Less or equal than between two expressions.
+    | ELEq Type Exp Exp
+    -- | Less than between two expressions.
+    | ELess Type Exp Exp
+    -- | Not equal than between two expressions.
+    | ENEq    Type Exp Exp
+    -- | Equal than between two expressions.
+    | EEqual  Type Exp Exp
+    -- | Negative of an expression.
+    | ENeg Type Exp
+    -- | Logic complement of an expression.
+    | ENot Type Exp
+    -- | Bitwise complement of an expression.
+    | EBitNot Type Exp
+    -- | Function call as an expression.
+    | EFCall Type FCall
+    -- | Token as an expression.
+    | EToken Type Token
+    -- | List expression.
+    | EList Type [Exp]
+    -- | Array expression.
+    | EArr Type [Exp]
+    -- | Dictionary expression.
+    | EDict Type [(Exp,Exp)]
+    -- | Tuple expression.
+    | ETup Type [Exp]
+    -- | Identifier as an expression.
+    | EIdent Type Identifier
+    -- | Reference as an expression.
+    | ERef Type Identifier
+    -- | Read expression.
+    | Read Type
+    deriving (Show,Eq)
 
-data Exp = 
-    ESum    Type Exp Exp     |
-    EDif    Type Exp Exp     |
-    EMul    Type Exp Exp     |
-    EDiv    Type Exp Exp     |
-    EMod    Type Exp Exp     |
-    EPot    Type Exp Exp     |
-    EDivE   Type Exp Exp     |
-    ELShift Type Exp Exp     |
-    ERShift Type Exp Exp     |
-    EBitOr  Type Exp Exp     |
-    EBitAnd Type Exp Exp     |
-    EBitXor Type Exp Exp     |
-    EOr     Type Exp Exp     |
-    EAnd    Type Exp Exp     |
-    EGEq    Type Exp Exp     |
-    EGreat  Type Exp Exp     |
-    ELEq    Type Exp Exp     |
-    ELess   Type Exp Exp     |
-    ENEq    Type Exp Exp     |
-    EEqual  Type Exp Exp     |
-    ENeg    Type Exp         |
-    ENot    Type Exp         |
-    EBitNot Type Exp         |
-    EFCall  Type FCall       |
-    EToken  Type Token       |
-    EList   Type [Exp]       |
-    EArr    Type [Exp]       |
-    EDict   Type [(Exp,Exp)] |
-    ETup    Type [Exp]       |
-    EIdent  Type Identifier  |
-    Read    Type             |
-    ERef    Type Identifier
-    deriving (Show,Eq,Read)
+data FCall
+    -- | Function call.
+    = FCall Type Token [Exp]
+    deriving (Show,Eq)
 
-data FCall = FCall Type Token [Exp] deriving (Show,Eq,Read)
+-- Types definition.
 
 data Type = TypeInt                |
             TypeFloat              |
@@ -131,9 +237,9 @@ data Type = TypeInt                |
             TypeFunc [Type] [Type] |
             TypePointer Type       |
             TypeData String
-            deriving (Eq,Read,Show)
+            deriving (Eq)
 
-{-instance Show Type where
+instance Show Type where
     show TypeInt = "Int"
     show TypeFloat = "Float"
     show TypeBool = "Bool"
@@ -141,14 +247,14 @@ data Type = TypeInt                |
     show TypeString = "String"
     show TypeVoid = "Void"
     show TypeError = "Type Error"
-    show TypeType = "Type Type"
+    show TypeType = "Type"
     show (TypeArray t n) = "Array of " ++ (show t) ++ " of size " ++ n
     show (TypeList t) = "List of " ++ (show t)
     show (TypeDict k v) = "Dictionary of pairs (" ++ (show k) ++ ", " ++ (show v) ++ ")"
     show (TypeTuple t) = "Tuple of: " ++ (show t)
     show (TypeFunc a r) = "Function from " ++ (show a) ++ " to " ++ (show r)
     show (TypePointer t) = "Pointer of " ++ (show t)
-    show (TypeData s) = s-}
+    show (TypeData s) = s
 
 -- Funciones para retorno de tipos -- 
 
@@ -241,8 +347,8 @@ instance AST Exp where
 instance AST FCall where
     returnType (FCall t _ _) = t
 
+-- | Checks that the type in a list of expressions is unique.
 expsType :: [Exp] -> Type
 expsType es = case (nub $ map returnType es) of
     t:[] -> t
     _ -> TypeError
-    
