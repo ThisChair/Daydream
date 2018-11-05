@@ -4,6 +4,7 @@ import SymTable
 import SyntaxTree
 import Lexer
 import Control.Monad.Trans.State.Lazy
+import Control.Monad (forM)
 import Data.Map as M
 import Data.List as L
 
@@ -48,7 +49,8 @@ data Operator = OSum |
                 OBitNot |
                 OAssign |
                 OIndex |
-                OJump |      
+                OJump |
+                OIdent |       
                 ONone
                 deriving (Eq)
 
@@ -81,15 +83,24 @@ instance Show Operator where
     show OIndex = "[]="
     show OJump = "goto"
 
--- Funciones para el acceso a tripletas
-fst' :: (a,b,c) -> a
-fst' (a,_,_) = a
+-- Funciones para el acceso a tetrapletas
+fst' :: (a,b,c,d) -> a
+fst' (a,_,_,_) = a
 
-snd' :: (a,b,c) -> b
-snd' (_,b,_) = b
+snd' :: (a,b,c,d) -> b
+snd' (_,b,_,_) = b
 
-trd' :: (a,b,c) -> c
-trd' (_,_,c) = c
+trd' :: (a,b,c,d) -> c
+trd' (_,_,c,_) = c
+
+fth' :: (a,b,c,d) -> d
+fth' (_,_,_,d) = d
+
+--------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------
+--------------------- FUNCIONES PARA MANIPULACION DEL STATE --------------------------
+--------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------
 
 -- Retorna un nuevo nombre temporal
 genNewTemp :: State (Int,Int,String,String) String
@@ -137,17 +148,19 @@ getFalseCode = do
 getFalseCodeFromStateTuple :: (Int,Int,String,String) -> String
 getFalseCodeFromStateTuple (_,_,_,f) = f
 
+-- Asigna al valor de E.true una string dada
 setTrueCode :: String -> State (Int,Int,String,String) ()
 setTrueCode string = state $ \(c1,c2,tc,fc) -> ((),(c1,c2,string,fc))
 
+-- Asigna al valor de E.false una string dada
 setFalseCode :: String -> State (Int,Int,String,String) ()
 setFalseCode string = state $ \(c1,c2,tc,fc) -> ((),(c1,c2,tc,string))
 
--- Revisa la tabla de simbolos jerarquica y retorna el offset asociado a las variables
-lookupTierTable :: SymTable -> String -> Integer -> Integer
-lookupTierTable symtable varname varscope = case M.lookup varname symtable of
-                                                 Just var_scope_list -> case M.lookup varscope var_scope_list of
-                                                                             Just offset -> scope offset
+--------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------
+----------------------- FUNCIONES PARA MANIPULACION DE TAC ---------------------------
+--------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------
 
 -- Convierte un IfRegister en una String para su pronta impresion           
 convertIfRegistertoString :: TAC -> String -> [TAC] -> String -> [TAC] -> String -> String -> String
@@ -159,11 +172,12 @@ convertIfRegistertoString c j1 fc j2 tc r l= l ++ ": " ++ "if " ++ cond_string +
 -- Convierte una Quadruplet en una String para su pronta impresion
 convertQuadrupletoString :: Operator -> String -> String -> String -> String -> String
 convertQuadrupletoString o a1 a2 r l
- | (o == ONone) && (l == "") = "" 
+ | ((o == ONone) && (l == "")) || (o == OIdent) = "" 
  | (o == ONone) && (l /= "") = l ++ ": " ++ (show o)
  | o == OAssign = l ++ ": " ++ r ++ " := " ++ a1
  | (o == ONeg) || (o == ONot) || (o == OBitNot) = l ++ ": " ++ r ++ " = " ++ (show o) ++ " " ++ (a1)
  | (o == OJump) = l ++ ": " ++ (show o) ++ " " ++ a1 
+ | (o == OIndex) = l ++ ": " ++ r ++ " " ++ (show o) ++ " " ++ a1
  | otherwise = l ++ ": " ++ r ++ " = " ++ a1 ++ " " ++ (show o) ++ " " ++ a2 
 
 -- Convierte un TAC en una String para su pronta impresion
@@ -176,40 +190,47 @@ printTAC :: [TAC] -> IO()
 printTAC tacList = do 
     let tacList' = (L.map convertTACtoString . reverse) tacList
         tacList'' = [x | x <- tacList', x /= ""]
-        --maxlabelwidth = maximum [length $ getmaxlabel x | x <- tacList]
-        --spacing = concat [" " | y <- [0..maxlabelwidth]]
         in (putStrLn . unlines) tacList''
-{-
-getmaxlabel :: TAC -> String
-getmaxlabel (IfRegister {cond=c,truejumplabel=j1,falsecode=fc,falsejumplabel=j2,truecode=tc,label=l}) = (snd . maximum) [(length x,x) | x <- ([l]++L.map getmaxlabel fc++L.map getmaxlabel tc)]
-getmaxlabel (Quadruplet {op=o,arg1=a1,arg2=a2,result=r,label=l}) = l
 
-addSpacing :: String -> String -> String
-addSpacing spacing string
- | L.isPrefixOf "\nlabel: if"
- | L.isPrefixOf "\n: if" string = spacing ++  
- | L.isPrefixOf "\nlabel" string = string
- | otherwise = spacing ++ string
- where list = [snd x | x <- (L.map (`L.splitAt` string) (L.findIndices (`elem` "\n") string))]
--}
+setInsLabel :: [TAC] -> [TAC]
+setInsLabel tacList = let root = head tacList
+                          rootlabel = (label . head) tacList
+                          top = last tacList
+                          newtop = setlabel rootlabel top
+                          body = (tail . reverse . tail) tacList
+                          newroot = setlabel "" root
+                          in (newroot : reverse (newtop : body))
+                          where setlabel nl (Quadruplet {op=o,arg1=a1,arg2=a2,result=r,label=l}) =  createQuadruplet o a1 a2 r nl
+                                setlabel nl (IfRegister {cond=c,truejumplabel=j1,falsecode=fc,falsejumplabel=j2,truecode=tc,result=r,label=l}) = createIfRegister c j1 fc j2 tc r l
 
-createQuadruplet :: Operator -> String -> String -> String -> String -> Int -> TAC
-createQuadruplet o a1 a2 r l i
- | i > 2 = Quadruplet {op=o, arg1=a1, arg2=a2, result=r, label=""}
- | otherwise = Quadruplet {op=o, arg1=a1, arg2=a2, result=r, label=l}
+--------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------
+----------------- FUNCIONES AUXILIARES PARA GENERACION DE TAC ------------------------
+--------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------
 
+-- Crea una Quadruplet
+createQuadruplet :: Operator -> String -> String -> String -> String -> TAC
+createQuadruplet o a1 a2 r l = Quadruplet {op=o, arg1=a1, arg2=a2, result=r, label=l}
+
+-- Crea un IfRegister
 createIfRegister :: TAC -> String -> [TAC] -> String -> [TAC] -> String -> String -> TAC
 createIfRegister c j1 tc j2 fc r l = IfRegister {cond=c, truejumplabel=j1, truecode=tc, falsejumplabel=j2, falsecode=fc, result=r, label=l}
+
+-- Revisa la tabla de simbolos jerarquica y retorna el offset asociado a las variables
+lookupTierTable :: SymTable -> String -> Integer -> Integer
+lookupTierTable symtable varname varscope = case M.lookup varname symtable of
+                                                 Just var_scope_list -> case M.lookup varscope var_scope_list of
+                                                                             Just offset -> scope offset
 
 -- Funcion generica que genera TAC para cualquier operador binario aritmetico
 genBinOpTAC :: (TAC_convertible a) => SymTable -> Operator -> a -> a -> State (Int,Int,String,String) [TAC]
 genBinOpTAC symtable bin_op exp1 exp2 = do
     leftTAC <- toTAC symtable exp1
     rightTAC <- toTAC symtable exp2
-    currentLabel <- getCurrentLabel
     newlabel <- genNewTemp
     let subTAC = rightTAC ++ leftTAC
-        newTAC = createQuadruplet bin_op (getLatestTemp leftTAC) (getLatestTemp rightTAC) newlabel currentLabel (length subTAC)
+        newTAC = createQuadruplet bin_op (getLatestTemp leftTAC) (getLatestTemp rightTAC) newlabel ""
         in return (newTAC : subTAC)      
 
 -- Funcion generica que genera TAC para cualquier operador binario booleano
@@ -224,9 +245,9 @@ genRelBinOpTAC symtable rel_bin_op exp1 exp2 = do
     nextcode' <- genNewLabel
     let subTAC = rightTAC ++ leftTAC
         labelcode = genLabelCode nextcode'
-        c = createQuadruplet rel_bin_op (getLatestTemp leftTAC) (getLatestTemp rightTAC) "" "" 0
-        true_code = [labelcode,createQuadruplet OAssign "1" "" newlabel t_jump 0]
-        false_code = [labelcode,createQuadruplet OAssign "0" "" newlabel f_jump 0]
+        c = createQuadruplet rel_bin_op (getLatestTemp leftTAC) (getLatestTemp rightTAC) "" "" 
+        true_code = [labelcode,createQuadruplet OAssign "1" "" newlabel t_jump ]
+        false_code = [labelcode,createQuadruplet OAssign "0" "" newlabel f_jump ]
         newTAC = createIfRegister c t_jump true_code f_jump false_code newlabel nextcode
         in return (newTAC : subTAC)
 
@@ -236,7 +257,7 @@ genUnOpTAC symtable un_op exp = do
     expTAC <- toTAC symtable exp
     currentLabel <- getCurrentLabel 
     newlabel <- genNewTemp
-    let newTAC = createQuadruplet un_op (getLatestTemp expTAC) "" newlabel currentLabel (length expTAC)
+    let newTAC = createQuadruplet un_op (getLatestTemp expTAC) "" newlabel currentLabel
         in return (newTAC : expTAC)
 
 -- Funcion generica que genera TAC de control de flujo para cualquier operador relacional binario
@@ -249,24 +270,25 @@ genFlowRelBinOPTAC symtable rel_bin_op exp1 exp2 = do
     let subTAC = rightTAC ++ leftTAC
         id1 = getLatestTemp leftTAC
         id2 = getLatestTemp rightTAC
-        c = createQuadruplet rel_bin_op id1 id2 "" "" 0
-        noop = [createQuadruplet ONone "" "" "" "" 0]
+        c = createQuadruplet rel_bin_op id1 id2 "" "" 
+        noop = [createQuadruplet ONone "" "" "" ""]
         newTAC = createIfRegister c t_jump noop f_jump noop "" ""
         in return (newTAC : subTAC)
 
 ----------------------------------------------------------------------------
 ----------------------------------------------------------------------------
+--------------------- FUNCIONES PARA GENERACION DE TAC ---------------------
 ----------------------------------------------------------------------------
--- Funciones para generacion de TAC --
+----------------------------------------------------------------------------
 
 -- Inicio del arbol sintactico
 instance TAC_convertible Init where
    toTAC symtable (Init _ _ _ ins_list) = do
         insTAC <- mapM (toTAC symtable) ins_list -- lista de TACs de la lista de instrucciones del programa
         finalLabel <- getCurrentLabel
-        let finalTAC = (Quadruplet {op=ONone, arg1="",arg2="",result="",label=finalLabel}) : (concat $ reverse insTAC)
+        let finalTAC = (createQuadruplet ONone "" "" "" finalLabel) : (concat $ reverse insTAC)
             in return finalTAC
-
+  
 -- Instrucciones
 instance TAC_convertible Instruction where
     -- Bloques
@@ -276,20 +298,24 @@ instance TAC_convertible Instruction where
 
     -- Asignaciones
     toTAC symtable (Assign _ (id_list,vr_list)) = do
-        nextcode <- getCurrentLabel -- El next code de esta instruccion
-        vrTAC <- mapM (toTAC symtable) vr_list -- lista de TACs de los right value
+        label <- getCurrentLabel -- El next code de esta instruccion
+        vrTAC <- mapM (toTAC symtable) vr_list -- lista de TACs de los right value 
         idTAC <- mapM (toTAC symtable) id_list -- lista de TACs de los identificadores
-        nextcode' <- genNewLabel -- El next code de la instruccion por venir
-        let vrTACList = (concat . reverse) vrTAC 
-            vrTempList = L.map getLatestTemp vrTAC -- lista de temporales finales de los rv a ser asignados a los id.
-            vrTACLenght = L.map length vrTAC
-            idTACList = concat idTAC 
-            idStringList = [ result x | x <- idTACList, op x == ONone] -- lista de nombres de los identificadores.
-            assignmentTuples = reverse (zip3 idStringList vrTempList vrTACLenght) -- tripletas con las asignaciones correspondientes (id,rv_temp,length vrTAC)
-            newTAC = [createQuadruplet OAssign (snd' x) "" (fst' x) nextcode (trd' x) | x <- assignmentTuples ] -- lista de TACs 'id := rv_temp'
-            labelcode = genLabelCode nextcode'
-            finalTAC = concat [ fst x : snd x | x <- (zip newTAC (reverse vrTAC)) ]
-            in return (labelcode : finalTAC)
+        labellist <- mapM (\x -> genNewLabel) [1..((length $ concat idTAC))-1]
+        nextcode <- genNewLabel -- El next code de la instruccion por venir
+        let labellist' = label : labellist
+            labellist'' = (tail . reverse ) (nextcode : (reverse labellist'))
+            vrTAClist = (concat . reverse) vrTAC 
+            vrTemplist = L.map getLatestTemp vrTAC -- lista de temporales finales de los rv a ser asignados a los id
+            vrTAClenght = L.map length vrTAC -- lista de tamaños de las derivaciones de los rv
+            idTAClist = concat idTAC -- -- lista de id
+            idStringlist = [ result x | x <- idTAClist, op x == OIdent ] -- lista de nombres de los identificadores
+            assignmentTuples = reverse (zip4 idStringlist vrTemplist vrTAClenght labellist') -- tripletas con las asignaciones correspondientes (id,rv_temp,length vrTAC,label)
+            newTAC = [ createQuadruplet OAssign (snd' x) "" (fst' x) (fth' x) | x <- assignmentTuples ] -- lista de TACs 'id := rv_temp' [TAC]
+            labelcodelist = L.map genLabelCode (labellist'') -- codigo para ir a la siguiente instruccion de cada asignación [TAC]
+            newTAC' = [ reverse (fst x : [snd x]) | x <- (zip newTAC (reverse labelcodelist)) ] -- [ [TAC] | (TAC,TAC) ] -> [[TAC]]
+            finalTAC = concat $ L.map setInsLabel [ fst x ++ snd x | x <- (zip newTAC' (reverse vrTAC)) ] -- concat [ [TAC] | ([TAC],[TAC]) ]
+            in return (idTAClist ++ finalTAC)
 
     -- Selectores 
     toTAC symtable (IfThen _ exp ins) = do -- S -> if E then S1
@@ -302,7 +328,7 @@ instance TAC_convertible Instruction where
         expTAC <- toTACFlow symtable exp
         setCurrentLabel exp_t_jump    -- S1.next := S.next
         insTAC <- toTAC symtable ins
-        --newTAC = createIfRegister c exp_t_jump insTAC nextcode' [createQuadruplet ONone "" "" "" "" 0] "" nextcode
+        --newTAC = createIfRegister c exp_t_jump insTAC nextcode' [createQuadruplet ONone "" "" "" ""] "" nextcode
         return (insTAC ++ expTAC)
 
     --toTAC symtable (IfElse _ )
@@ -339,11 +365,11 @@ instance TAC_convertible Exp where
     toTAC symtable (EBitNot _ exp ) = genUnOpTAC symtable OBitNot exp 
 
     -- Tokens
-    toTAC symtable (EToken _ (TNum _ s)) = return [createQuadruplet ONone "" "" s "" 0]
-    toTAC symtable (EToken _ (TString _ s)) = return [createQuadruplet ONone "" "" s "" 0]
-    toTAC symtable (EToken _ (TChar _ s)) = return [createQuadruplet ONone "" "" s "" 0]
-    toTAC symtable (EToken _ (TTrue _)) = return [createQuadruplet ONone "" "" "true" "" 0]
-    toTAC symtable (EToken _ (TFalse _)) = return [createQuadruplet ONone "" "" "false" "" 0]
+    toTAC symtable (EToken _ (TNum _ s)) = return [createQuadruplet ONone "" "" s "" ]
+    toTAC symtable (EToken _ (TString _ s)) = return [createQuadruplet ONone "" "" s "" ]
+    toTAC symtable (EToken _ (TChar _ s)) = return [createQuadruplet ONone "" "" s "" ]
+    toTAC symtable (EToken _ (TTrue _)) = return [createQuadruplet ONone "" "" "true" "" ]
+    toTAC symtable (EToken _ (TFalse _)) = return [createQuadruplet ONone "" "" "false" "" ]
 
     -- Arreglos
     --toTAC symtable (EArr t exp_list) =
@@ -406,34 +432,31 @@ toTACFlow symtable (ENot _ exp) = do -- E -> not E1
 toTACFlow symtable (EToken _ (TTrue _)) = do
     label <- getCurrentLabel
     t_jump <- getTrueCode
-    return [createQuadruplet OJump t_jump "" "" "" 0]
+    return [createQuadruplet OJump t_jump "" "" ""]
 
 toTACFlow symtable (EToken _ (TFalse _)) = do
     label <- getCurrentLabel
     f_jump <- getFalseCode
-    return [createQuadruplet OJump f_jump "" "" "" 0]
+    return [createQuadruplet OJump f_jump "" "" ""]
 
 
 -- Identificadores
 instance TAC_convertible Identifier where
     toTAC symtable (Variable _ (name,scope,_)) -- 'name' contiene el nombre del identificador , 'scope' el alcance asociado 
-     | offset == 2 = return [Quadruplet {op=ONone, arg1="", arg2="", result=name, label=""}]
-     | otherwise = return [Quadruplet {op=ONone, arg1="", arg2="", result=name++"["++(show offset)++"]", label=""}]
+     | offset == 2 = return [createQuadruplet OIdent "" "" name ""]
+     | otherwise = return [createQuadruplet OIdent "" "" (name++"["++(show offset)++"]") ""]
      where offset = lookupTierTable symtable name scope
                 
     -- Acceso a arreglos (indices)
     toTAC symtable (Index t id exp)  = do
+        label <- getCurrentLabel
         idTAC <- toTAC symtable id 
         expTAC <- toTAC symtable exp 
         newlabel1 <- genNewTemp
-        newlabel2 <- genNewTemp
-        let expTemp = getLatestTemp expTAC
-            width = "width" -- falta una forma de obtener la width
-            tac0 = Quadruplet {op=OMul, arg1=expTemp, arg2=width, result=newlabel1, label=""} -- temp1 = i * width
-            tac1 = Quadruplet {op=OIndex, arg1=idString id, arg2=expTemp, result=newlabel2, label=""} -- temp2 = x []= i
-            resultString = (idString id) ++ "[" ++ newlabel2 ++ "]"  
-            tac2 = Quadruplet {op=ONone, arg1="", arg2="", result=resultString, label=""} -- x[i] = temp2
-        return (tac2 : tac1 : tac0 : expTAC)
+        let width = "width" -- falta una forma de obtener la width
+            tac0 = createQuadruplet OMul (getLatestTemp expTAC) width newlabel1 ""  -- temp1 = i * width
+            tac1 = createQuadruplet OIndex newlabel1 "" (idString id) label  -- x []= temp1
+        return (tac1 : tac0 : expTAC)
 
 instance TAC_convertible RightValue where
     toTAC symtable (ValueExp exp) = do
