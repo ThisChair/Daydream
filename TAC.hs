@@ -116,6 +116,9 @@ getCurrentLabel = do
 getLabelFromStateTuple :: (Int,Int,String,String) -> String
 getLabelFromStateTuple (_,l,_,_) = show l
 
+setCurrentLabel :: String -> State (Int,Int,String,String) ()
+setCurrentLabel string = state $ \(c1,c2,tc,fc) -> ((),(c1,read $ tail string :: Int,tc,fc))
+
 -- Retorna la etiqueta correspondiente a E.true actual
 getTrueCode :: State (Int,Int,String,String) String
 getTrueCode = do
@@ -289,17 +292,20 @@ instance TAC_convertible Instruction where
             in return (labelcode : finalTAC)
 
     -- Selectores 
-    toTAC symtable (IfThen _ exp ins) = do
-        nextcode <- getCurrentLabel -- El next code de esta instruccion
-        exp_t_jump <- genNewLabel
-        insTAC <- toTAC symtable ins
+    toTAC symtable (IfThen _ exp ins) = do -- S -> if E then S1
+        label <- getCurrentLabel -- El label de esta instruccion
+        exp_t_jump <- genNewLabel     -- E.true := newlabel
+        nextcode <- genNewLabel  -- El nextcode de esta instruccion
+        exp_f_jump <- getCurrentLabel -- E.false := S.next
         setTrueCode exp_t_jump
-        setFalseCode nextcode
+        setFalseCode exp_f_jump
         expTAC <- toTACFlow symtable exp
-        nextcode' <- getCurrentLabel
-        let c = (cond . head) expTAC
-            newTAC = [createIfRegister c exp_t_jump insTAC nextcode' [createQuadruplet ONone "" "" "" "" 0] "" nextcode]
-            in return newTAC
+        setCurrentLabel exp_t_jump    -- S1.next := S.next
+        insTAC <- toTAC symtable ins
+        --newTAC = createIfRegister c exp_t_jump insTAC nextcode' [createQuadruplet ONone "" "" "" "" 0] "" nextcode
+        return (insTAC ++ expTAC)
+
+    --toTAC symtable (IfElse _ )
 
 -- Expresiones
 instance TAC_convertible Exp where
@@ -358,7 +364,55 @@ toTACFlow symtable (ENEq _ exp1 exp2) = genFlowRelBinOPTAC symtable ONEq exp1 ex
 toTACFlow symtable (EEqual _ exp1 exp2) = genFlowRelBinOPTAC symtable OEqual exp1 exp2
 
     -- Booleanas
-toTACFlow symtable (EOr _ exp1 exp2) = 
+toTACFlow symtable (EOr _ exp1 exp2) = do  -- E -> E1 or E2
+    label <- getCurrentLabel -- El label de esta instruccion
+    exp1_t_jump <- getTrueCode   -- E1.true := E.true 
+    exp1_f_jump <- genNewLabel   -- E2.false := newlabel
+    exp2_t_jump <- getTrueCode   -- E2.true := E.true
+    exp2_f_jump <- getFalseCode  -- E2.false := E.false
+    setTrueCode exp1_t_jump
+    setFalseCode exp1_f_jump
+    leftTAC <- toTACFlow symtable exp1
+    setTrueCode exp2_t_jump
+    setFalseCode exp2_f_jump
+    setCurrentLabel exp1_f_jump
+    rightTAC <- toTACFlow symtable exp2
+    return (rightTAC ++ leftTAC)
+
+toTACFlow symtable (EAnd _ exp1 exp2) = do -- E -> E1 and E2
+    label <- getCurrentLabel -- El label de esta instruccion
+    exp1_t_jump <- genNewLabel  -- E1.true := newlabel
+    exp1_f_jump <- getFalseCode -- E1.false := E.false
+    exp2_t_jump <- getTrueCode  -- E2.true := E.true
+    exp2_f_jump <- getFalseCode -- E.false := E.false
+    setTrueCode exp1_t_jump
+    setFalseCode exp1_f_jump
+    leftTAC <- toTACFlow symtable exp1
+    setTrueCode exp2_t_jump
+    setFalseCode exp2_f_jump
+    setCurrentLabel exp1_t_jump
+    rightTAC <- toTACFlow symtable exp2
+    return (rightTAC ++ leftTAC)
+
+toTACFlow symtable (ENot _ exp) = do -- E -> not E1
+    label <- getCurrentLabel -- El label de esta instruccion
+    exp_t_jump <- getFalseCode  -- E1.true := E.false
+    exp_f_jump <- getTrueCode   -- E1.false := E.true
+    setTrueCode exp_t_jump
+    setFalseCode exp_f_jump
+    expTAC <- toTACFlow symtable exp
+    return expTAC
+
+toTACFlow symtable (EToken _ (TTrue _)) = do
+    label <- getCurrentLabel
+    t_jump <- getTrueCode
+    return [createQuadruplet OJump t_jump "" "" "" 0]
+
+toTACFlow symtable (EToken _ (TFalse _)) = do
+    label <- getCurrentLabel
+    f_jump <- getFalseCode
+    return [createQuadruplet OJump f_jump "" "" "" 0]
+
 
 -- Identificadores
 instance TAC_convertible Identifier where
