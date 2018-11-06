@@ -202,6 +202,19 @@ setInsLabel tacList = let trueroot = head tacList
                           where setlabel nl (Quadruplet {op=o,arg1=a1,arg2=a2,result=r,label=l}) =  createQuadruplet o a1 a2 r nl
                                 setlabel nl (IfRegister {cond=c,truejumplabel=j1,falsecode=fc,falsejumplabel=j2,truecode=tc,result=r,label=l}) = createIfRegister c j1 fc j2 tc r l
 
+setInsLabel' :: String -> [TAC] -> [TAC]
+setInsLabel' label tacList = let trueroot = head tacList
+                                 tacList' = tail tacList
+                                 root = head tacList'
+                                 rootlabel = label
+                                 top = last tacList
+                                 newtop = setlabel rootlabel top
+                                 body = (tail . reverse . tail) tacList'
+                                 newroot = setlabel "" root
+                                 in (trueroot : newroot : reverse (newtop : body))
+                                 where setlabel nl (Quadruplet {op=o,arg1=a1,arg2=a2,result=r,label=l}) =  createQuadruplet o a1 a2 r nl
+                                       setlabel nl (IfRegister {cond=c,truejumplabel=j1,falsecode=fc,falsejumplabel=j2,truecode=tc,result=r,label=l}) = createIfRegister c j1 fc j2 tc r l
+
 --------------------------------------------------------------------------------------
 --------------------------------------------------------------------------------------
 ----------------- FUNCIONES AUXILIARES PARA GENERACION DE TAC ------------------------
@@ -321,14 +334,14 @@ instance TAC_convertible Instruction where
     toTAC symtable (IfThen _ exp ins) = do -- S -> if E then S1
         label <- getCurrentLabel -- El label de esta instruccion
         nextcode <- genNewLabel  -- El nextcode de esta instruccion
-        exp_t_jump <- genNewLabel     -- E.true := newlabel()
         exp_f_jump <- getCurrentLabel -- E.false := S.next
+        exp_t_jump <- genNewLabel     -- E.true := newlabel()
         setTrueCode exp_t_jump
         setFalseCode exp_f_jump
         expTAC <- toTACFlow symtable exp
-        setCurrentLabel nextcode    -- S1.next := S.next
+        setCurrentLabel exp_t_jump    -- S1.next := S.next (realmente esta saltando a E.true)
         insTAC <- toTAC symtable ins 
-        return (setInsLabel (insTAC ++ expTAC))
+        return (setInsLabel' label (insTAC ++ expTAC))
 
     {-toTAC symtable (IfElse _ ) = do -- S -> if E then S1 else S2
         label <- getCurrentLabel -- El label de esta instruccion
