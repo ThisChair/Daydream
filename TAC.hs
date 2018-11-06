@@ -48,7 +48,6 @@ data Operator = OSum |
                 ONot |
                 OBitNot |
                 OAssign |
-                OIndex |
                 OJump |
                 OIdent |       
                 ONone
@@ -80,7 +79,6 @@ instance Show Operator where
     show ONot = "¬"
     show OBitNot = "~"
     show OAssign = ":="
-    show OIndex = "[]="
     show OJump = "goto"
 
 -- Funciones para el acceso a tetrapletas
@@ -177,7 +175,6 @@ convertQuadrupletoString o a1 a2 r l
  | o == OAssign = l ++ ": " ++ r ++ " := " ++ a1
  | (o == ONeg) || (o == ONot) || (o == OBitNot) = l ++ ": " ++ r ++ " = " ++ (show o) ++ " " ++ (a1)
  | (o == OJump) = l ++ ": " ++ (show o) ++ " " ++ a1 
- | (o == OIndex) = l ++ ": " ++ r ++ " " ++ (show o) ++ " " ++ a1
  | otherwise = l ++ ": " ++ r ++ " = " ++ a1 ++ " " ++ (show o) ++ " " ++ a2 
 
 -- Convierte un TAC en una String para su pronta impresion
@@ -193,13 +190,15 @@ printTAC tacList = do
         in (putStrLn . unlines) tacList''
 
 setInsLabel :: [TAC] -> [TAC]
-setInsLabel tacList = let root = head tacList
-                          rootlabel = (label . head) tacList
+setInsLabel tacList = let trueroot = head tacList
+                          tacList' = tail tacList
+                          root = head tacList'
+                          rootlabel = label root
                           top = last tacList
                           newtop = setlabel rootlabel top
-                          body = (tail . reverse . tail) tacList
+                          body = (tail . reverse . tail) tacList'
                           newroot = setlabel "" root
-                          in (newroot : reverse (newtop : body))
+                          in (trueroot : newroot : reverse (newtop : body))
                           where setlabel nl (Quadruplet {op=o,arg1=a1,arg2=a2,result=r,label=l}) =  createQuadruplet o a1 a2 r nl
                                 setlabel nl (IfRegister {cond=c,truejumplabel=j1,falsecode=fc,falsejumplabel=j2,truecode=tc,result=r,label=l}) = createIfRegister c j1 fc j2 tc r l
 
@@ -236,20 +235,20 @@ genBinOpTAC symtable bin_op exp1 exp2 = do
 -- Funcion generica que genera TAC para cualquier operador binario booleano
 genRelBinOpTAC :: (TAC_convertible a) => SymTable -> Operator -> a -> a -> State (Int,Int,String,String) [TAC]
 genRelBinOpTAC symtable rel_bin_op exp1 exp2 = do
-    nextcode <- getCurrentLabel
-    newlabel <- genNewTemp
-    t_jump <- genNewLabel
-    f_jump <- genNewLabel
+    newlabel <- genNewTemp -- Temporal para albergar el valor booleano
+    t_jump <- genNewLabel  -- Etiqueta para saltar en caso de True
+    f_jump <- genNewLabel  -- Etiqueta para saltar en caso de False
     leftTAC <- toTAC symtable exp1 
     rightTAC <- toTAC symtable exp2
-    nextcode' <- genNewLabel
+    nextcode <- genNewLabel -- El nextcode de esta instruccion
     let subTAC = rightTAC ++ leftTAC
-        labelcode = genLabelCode nextcode'
-        c = createQuadruplet rel_bin_op (getLatestTemp leftTAC) (getLatestTemp rightTAC) "" "" 
-        true_code = [labelcode,createQuadruplet OAssign "1" "" newlabel t_jump ]
-        false_code = [labelcode,createQuadruplet OAssign "0" "" newlabel f_jump ]
-        newTAC = createIfRegister c t_jump true_code f_jump false_code newlabel nextcode
-        in return (newTAC : subTAC)
+        labelcode = genLabelCode nextcode -- Codigo para saltar a la siguiente instruccion
+        c = createQuadruplet rel_bin_op (getLatestTemp leftTAC) (getLatestTemp rightTAC) "" "" -- TAC para el condicional del IfRegister
+        true_code = [labelcode,createQuadruplet OAssign "1" "" newlabel t_jump] -- codigo en caso de True
+        false_code = [labelcode,createQuadruplet OAssign "0" "" newlabel f_jump] -- codigo en caso de False
+        newTAC = createIfRegister c t_jump true_code f_jump false_code newlabel ""
+        dummy_label = createQuadruplet ONone "" "" newlabel nextcode 
+        in return (dummy_label : newTAC : subTAC)
 
 -- Funcion generica que genera TAC para cualquier operador unario
 genUnOpTAC :: (TAC_convertible a) => SymTable -> Operator -> a -> State (Int,Int,String,String) [TAC]
@@ -298,40 +297,49 @@ instance TAC_convertible Instruction where
 
     -- Asignaciones
     toTAC symtable (Assign _ (id_list,vr_list)) = do
-        label <- getCurrentLabel -- El next code de esta instruccion
+        label <- getCurrentLabel -- El label de esta instruccion
         vrTAC <- mapM (toTAC symtable) vr_list -- lista de TACs de los right value 
         idTAC <- mapM (toTAC symtable) id_list -- lista de TACs de los identificadores
-        labellist <- mapM (\x -> genNewLabel) [1..((length $ concat idTAC))-1]
-        nextcode <- genNewLabel -- El next code de la instruccion por venir
+        labellist <- mapM (\x -> genNewLabel) [1..((length $ L.map head idTAC))-1] -- lista de labels a asignar
+        nextcode <- genNewLabel -- El nextcode de esta instruccion
         let labellist' = label : labellist
             labellist'' = (tail . reverse ) (nextcode : (reverse labellist'))
             vrTAClist = (concat . reverse) vrTAC 
             vrTemplist = L.map getLatestTemp vrTAC -- lista de temporales finales de los rv a ser asignados a los id
             vrTAClenght = L.map length vrTAC -- lista de tamaños de las derivaciones de los rv
-            idTAClist = concat idTAC -- -- lista de id
+            idTAClist = concat idTAC
             idStringlist = [ result x | x <- idTAClist, op x == OIdent ] -- lista de nombres de los identificadores
             assignmentTuples = reverse (zip4 idStringlist vrTemplist vrTAClenght labellist') -- tripletas con las asignaciones correspondientes (id,rv_temp,length vrTAC,label)
-            newTAC = [ createQuadruplet OAssign (snd' x) "" (fst' x) (fth' x) | x <- assignmentTuples ] -- lista de TACs 'id := rv_temp' [TAC]
-            labelcodelist = L.map genLabelCode (labellist'') -- codigo para ir a la siguiente instruccion de cada asignación [TAC]
-            newTAC' = [ reverse (fst x : [snd x]) | x <- (zip newTAC (reverse labelcodelist)) ] -- [ [TAC] | (TAC,TAC) ] -> [[TAC]]
-            finalTAC = concat $ L.map setInsLabel [ fst x ++ snd x | x <- (zip newTAC' (reverse vrTAC)) ] -- concat [ [TAC] | ([TAC],[TAC]) ]
-            in return (idTAClist ++ finalTAC)
+            newTAC = [ createQuadruplet OAssign (snd' x) "" (fst' x) (fth' x) | x <- assignmentTuples ] -- lista de TACs 'id := rv_temp' :: [TAC]
+            newTAC' = [ fst x : snd x | x <- (zip newTAC (reverse idTAC)) ] -- [ [TAC] | ( TAC,[TAC]) ]
+            labelcodelist = L.map genLabelCode (labellist'') -- codigo para ir a la siguiente instruccion de cada asignación :: [TAC]
+            newTAC'' = [ snd x : fst x | x <- (zip newTAC' (reverse labelcodelist)) ] -- :: [ [TAC] | ([TAC],TAC) ]
+            finalTAC = concat $ L.map setInsLabel [ fst x ++ snd x | x <- (zip newTAC'' (reverse vrTAC)) ] -- :: [ [TAC] | ([TAC],[TAC]) ]
+            in return (finalTAC)
 
     -- Selectores 
     toTAC symtable (IfThen _ exp ins) = do -- S -> if E then S1
         label <- getCurrentLabel -- El label de esta instruccion
-        exp_t_jump <- genNewLabel     -- E.true := newlabel
         nextcode <- genNewLabel  -- El nextcode de esta instruccion
+        exp_t_jump <- genNewLabel     -- E.true := newlabel()
         exp_f_jump <- getCurrentLabel -- E.false := S.next
         setTrueCode exp_t_jump
         setFalseCode exp_f_jump
         expTAC <- toTACFlow symtable exp
-        setCurrentLabel exp_t_jump    -- S1.next := S.next
-        insTAC <- toTAC symtable ins
-        --newTAC = createIfRegister c exp_t_jump insTAC nextcode' [createQuadruplet ONone "" "" "" ""] "" nextcode
-        return (insTAC ++ expTAC)
+        setCurrentLabel nextcode    -- S1.next := S.next
+        insTAC <- toTAC symtable ins 
+        return (setInsLabel (insTAC ++ expTAC))
 
-    --toTAC symtable (IfElse _ )
+    {-toTAC symtable (IfElse _ ) = do -- S -> if E then S1 else S2
+        label <- getCurrentLabel -- El label de esta instruccion
+        exp_t_jump <- genNewLabel -- E.true := newlabel()
+        exp_f_jump <- genNewLabel -- E.false := newlabel()
+        nextcode <- genNewLabel -- El nextcode de esta instruccion
+        setTrueCode exp_t_jump
+        setFalseCode exp_f_jump
+        expTAC <- toTACFlow symtable exp
+        setCurrentLabel exp_t_jump  
+    -}
 
 -- Expresiones
 instance TAC_convertible Exp where
@@ -432,12 +440,12 @@ toTACFlow symtable (ENot _ exp) = do -- E -> not E1
 toTACFlow symtable (EToken _ (TTrue _)) = do
     label <- getCurrentLabel
     t_jump <- getTrueCode
-    return [createQuadruplet OJump t_jump "" "" ""]
+    return [createQuadruplet OJump t_jump "" "" label]
 
 toTACFlow symtable (EToken _ (TFalse _)) = do
     label <- getCurrentLabel
     f_jump <- getFalseCode
-    return [createQuadruplet OJump f_jump "" "" ""]
+    return [createQuadruplet OJump f_jump "" "" label]
 
 
 -- Identificadores
@@ -453,11 +461,18 @@ instance TAC_convertible Identifier where
         idTAC <- toTAC symtable id 
         expTAC <- toTAC symtable exp 
         newlabel1 <- genNewTemp
+        newlabel2 <- genNewTemp
         let width = "width" -- falta una forma de obtener la width
-            tac0 = createQuadruplet OMul (getLatestTemp expTAC) width newlabel1 ""  -- temp1 = i * width
-            tac1 = createQuadruplet OIndex newlabel1 "" (idString id) label  -- x []= temp1
-        return (tac1 : tac0 : expTAC)
+            subTAC = createQuadruplet OAssign (getLatestTemp expTAC) "" newlabel1 ""
+            offsetTAC = createQuadruplet OMul newlabel2 width newlabel2 "" -- temp := exp * width
+            newTAC = createQuadruplet OIdent "" "" ((idString id) ++ "["++newlabel2++"]") "" -- id[temp]
+            in return (newTAC : offsetTAC : subTAC : expTAC)
 
 instance TAC_convertible RightValue where
     toTAC symtable (ValueExp exp) = do
         toTAC symtable exp 
+
+--instance TAC_convertible FCall where
+    --toTAC symtable (FCall _ t param_list) = do
+    --    param_listTAC <- mapM (toTAC symtable) param_list [[TAC]] -- Lista de TACs de las expresiones correspondientes a los parámetros
+    --    let tempList = mapM getLatestTemp param_listTAC  -- Lista de últimos temporales utilizados en cada [TAC] de las expresiones
