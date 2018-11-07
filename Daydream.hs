@@ -124,7 +124,7 @@ printSym s opts = if Table `elem` opts
 -- | Generates TAC for the syntax tree.
 generateTAC :: (TAC_convertible a) => a -> SymTable -> [Flag] -> IO ()
 generateTAC tree symtable opts = if Intermediate `elem` opts
-    then printTAC (evalState (toTAC symtable tree) (0,0,"",""))
+    then printTAC (evalState (toTAC symtable tree) (0,-1,"","",""))
     else return ()
 
 main :: IO()
