@@ -11,6 +11,8 @@ import Data.List as L
 class TAC_convertible a where
     toTAC :: SymTable -> a -> State (Int,Int,String,String,String) [TAC]
 
+    --toTACArray :: SymTable -> a -> State (Int,Int,String,String,String) [[TAC]]
+
 data TAC = Quadruplet { op :: Operator
                       , arg1 :: String
                       , arg2 :: String
@@ -22,7 +24,7 @@ data TAC = Quadruplet { op :: Operator
                       , falsejumplabel :: String
                       , falsecode :: [TAC]
                       , result :: String
-                      , label :: String } deriving (Show)
+                      , label :: String } deriving (Show) -- quitar el campo label
 
 data Operator = OSum |
                 ODif |
@@ -49,7 +51,9 @@ data Operator = OSum |
                 OBitNot |
                 OAssign |
                 OJump |
-                OIdent |       
+                OIdent | 
+                OPrint |  
+                OPrintLn |    
                 ONone
                 deriving (Eq)
 
@@ -80,6 +84,8 @@ instance Show Operator where
     show OBitNot = "~"
     show OAssign = ":="
     show OJump = "goto"
+    show OPrint = "print"
+    show OPrintLn = "println"
 
 -- Funciones para el acceso a tetrapletas
 fst' :: (a,b,c,d) -> a
@@ -188,6 +194,7 @@ convertQuadrupletoString o a1 a2 r l
  | ((o == ONone) || (o == OIdent)) && (l /= "") = l ++ ": " ++ (show ONone)
  | (o == ONeg) || (o == ONot) || (o == OBitNot) = l ++ ": " ++ r ++ " = " ++ (show o) ++ " " ++ (a1)
  | (o == OJump) = l ++ ": " ++ (show o) ++ " " ++ a1 
+ | (o == OPrint) || (o == OPrintLn) = ": " ++ (show o) ++ " " ++ a1
  | otherwise = l ++ ": " ++ r ++ " = " ++ a1 ++ " " ++ (show o) ++ " " ++ a2 
 
 -- Convierte un TAC en una String para su pronta impresion
@@ -279,9 +286,8 @@ genRelBinOpTAC symtable rel_bin_op exp1 exp2 = do
 genUnOpTAC :: (TAC_convertible a) => SymTable -> Operator -> a -> State (Int,Int,String,String,String) [TAC]
 genUnOpTAC symtable un_op exp = do
     expTAC <- toTAC symtable exp
-    currentLabel <- getCurrentLabel 
     newlabel <- genNewTemp
-    let newTAC = createQuadruplet un_op (getLatestTemp expTAC) "" newlabel currentLabel
+    let newTAC = createQuadruplet un_op (getLatestTemp expTAC) "" newlabel ""
         in return (newTAC : expTAC)
 
 -- Funcion generica que genera TAC de control de flujo para cualquier operador relacional binario
@@ -298,6 +304,25 @@ genFlowRelBinOPTAC symtable rel_bin_op exp1 exp2 = do
         noop = [createQuadruplet ONone "" "" "" ""]
         newTAC = createIfRegister c t_jump noop f_jump noop "" ""
         in return (newTAC : subTAC)
+
+-- Funcion para generaicon de TAC para asignaciones de arreglos
+genArrayTAC :: (String,[[TAC]]) -> State (Int,Int,String,String,String) [TAC]
+genArrayTAC (id,array) = let id_decomposition = [ id ++ "[" ++ (show x) ++ "]" | x <- [0..length array] ]
+                             assigments = [ createQuadruplet OAssign y "" x "" | x <- (L.map getLatestTemp array), y <- id_decomposition ]
+                             in return (assigments) 
+
+-- Funcion para generacion de TAC para codigo de funciones
+genFuncTAC :: (TAC_convertible a) => SymTable -> [(String,a)] -> State (Int,Int,String,String,String) [TAC]
+genFuncTAC symtable func_tuples = do
+    funcTAC <- mapM (funcTupleToTAC symtable) func_tuples -- [[TAC]]
+    return (concat funcTAC)
+
+-- Funcion que genera TAC para tuplas de funciones
+funcTupleToTAC :: (TAC_convertible a) => SymTable -> (String,a) -> State (Int,Int,String,String,String) [TAC]
+funcTupleToTAC symtable (func_name,func_code) = do
+    func_codesTAC <- toTAC symtable func_code -- Lista de [TAC] del codigo de las funciones
+    let nameTAC = genLabelCode func_name -- TAC para la label de la funcion
+        in return (nameTAC : func_codesTAC)
 
 ----------------------------------------------------------------------------
 ----------------------------------------------------------------------------
@@ -321,22 +346,33 @@ instance TAC_convertible Instruction where
         return (concat $ reverse insTAC)
 
     -- Asignaciones
+    {-toTAC symtable (Assign _ (id_list,vr_list)) = do
+        nextcode <- getNextCode -- El nextcode de esta instruccion
+        vrTAC <- mapM (toTACArray symtable) vr_list -- lista de [[TAC]] de los right value
+        idTAC <- mapM (toTAC symtable) id_list -- lista de TAC de los identificadores
+        next_ins_nextcode <- genNewLabel -- El nextcode de la siguiente instruccion
+        setNextCode next_ins_nextcode
+        let idTAClist = concat idTAC
+            idStringlist = [ result x | x <- idTAClist, op x == OIdent ] -- lista de nombres de los identificadores
+            assignmentTuples = reverse (zip idStringlist vrTAC) -- tripletas con las asignaciones correspondientes [(id,[[TAC]])]
+            in do
+                array_assignments_list <- mapM genArrayTAC assignmentTuples -- lista de asignaciones id := array :: [[TAC]]
+                return (concat array_assignments_list)-}
+
     toTAC symtable (Assign _ (id_list,vr_list)) = do
+        nextcode <- getNextCode -- El nextcode de esta instruccion
         vrTAC <- mapM (toTAC symtable) vr_list -- lista de TACs de los right value 
         idTAC <- mapM (toTAC symtable) id_list -- lista de TACs de los identificadores
-        nextcode <- getNextCode -- El nextcode de esta instruccion
         next_ins_nextcode <- genNewLabel -- El nextcode de la siguiente instruccion
         setNextCode next_ins_nextcode
         let vrTemplist = L.map getLatestTemp vrTAC -- lista de temporales finales de los rv a ser asignados a los id
-            vrTAClenght = L.map length vrTAC -- lista de tamaños de las derivaciones de los rv
             idTAClist = concat idTAC
             idStringlist = [ result x | x <- idTAClist, op x == OIdent ] -- lista de nombres de los identificadores
-            assignmentTuples = reverse (zip idStringlist vrTemplist) -- tripletas con las asignaciones correspondientes (id,rv_temp)
+            assignmentTuples = reverse (zip idStringlist vrTemplist) -- tripletas con las asignaciones correspondientes [(id,rv_temp)]
             newTAC = [ createQuadruplet OAssign (snd x) "" (fst x) "" | x <- assignmentTuples ] -- lista de TACs 'id := rv_temp' :: [TAC]
             newTAC' = [ fst x : snd x | x <- (zip newTAC (reverse idTAC)) ] -- [ [TAC] | ( TAC,[TAC]) ]
             finalTAC = concat [ fst x ++ snd x | x <- (zip newTAC' (reverse vrTAC)) ] -- :: [ [TAC] | ([TAC],[TAC]) ]
-            labelcode = genLabelCode nextcode
-            in return (labelcode : finalTAC)
+            in return finalTAC
 
     -- Selectores 
     toTAC symtable (IfThen _ exp ins) = do -- S -> if E then S1
@@ -362,21 +398,41 @@ instance TAC_convertible Instruction where
         let labelcode1 = genLabelCode exp_t_jump
             labelcode2 = genLabelCode exp_f_jump
             jumpcode = genJumpCode nextcode
-            in return (ins_list2TAC ++ (labelcode2 : jumpcode : ins_list1TAC) ++ (labelcode1 : expTAC))
+            labelcodefinal = genLabelCode nextcode
+            in return (labelcodefinal : (ins_list2TAC ++ (labelcode2 : jumpcode : ins_list1TAC) ++ (labelcode1 : expTAC)))
 
+    -- Iteradores
     toTAC symtable (While _ exp ins) = do -- S -> while E do S1
         nextcode <- getNextCode -- El next de esta instruccion
         begin <- genNewLabel -- S.begin = newlabel()
         exp_t_jump <- genNewLabel -- E.true := newlabel()
         exp_f_jump <- getNextCode -- E.false := S.next
         setNextCode begin -- S1.next := S.begin
+        setTrueCode exp_t_jump
+        setFalseCode exp_f_jump
         expTAC <- toTACFlow symtable exp
         ins_listTAC <- toTAC symtable ins
         let labelcode1 = genLabelCode begin
             labelcode2 = genLabelCode exp_t_jump
             jumpcode = genJumpCode begin
-            in return (jumpcode : (ins_listTAC ++ (labelcode2 : (reverse (labelcode1 : expTAC)))))
+            labelcodefinal = genLabelCode nextcode
+            in return (labelcodefinal : (jumpcode : (ins_listTAC ++ (labelcode2 : (reverse (labelcode1 : expTAC))))))
 
+    -- Prints
+    toTAC symtable (Print _ exp) = do 
+        nextcode <- getNextCode -- El next de esta instruccion
+        expTAC <- toTAC symtable exp
+        let newTAC = createQuadruplet OPrint (getLatestTemp expTAC) "" "" ""
+            labelcode = genLabelCode nextcode
+            in return (labelcode : newTAC : expTAC)
+
+    toTAC symtable (PrintLn _ exp) = do
+        nextcode <- getNextCode -- El next de esta instruccion
+        expTAC <- toTAC symtable exp
+        let newTAC = createQuadruplet OPrintLn (getLatestTemp expTAC) "" "" ""
+            labelcode = genLabelCode nextcode
+            in return (labelcode : newTAC : expTAC)
+ 
 -- Expresiones
 instance TAC_convertible Exp where
     -- Binarias
@@ -415,13 +471,16 @@ instance TAC_convertible Exp where
     toTAC symtable (EToken _ (TTrue _)) = return [createQuadruplet ONone "" "" "true" "" ]
     toTAC symtable (EToken _ (TFalse _)) = return [createQuadruplet ONone "" "" "false" "" ]
 
-    -- Arreglos
-    --toTAC symtable (EArr t exp_list) =
 
     -- Identificadores (expresiones)
     toTAC symtable (EIdent _ id) = do
         idTAC <- toTAC symtable id
         return idTAC
+
+    -- Arreglos
+    {-toTACArray symtable (EArr _ exp_list) = do
+        explist_TAC <- mapM (toTAC symtable) exp_list -- [[TAC]]
+        return explist_TAC-}
 
     -- Control de flujo
 toTACFlow :: SymTable -> Exp -> State (Int,Int,String,String,String) [TAC]
@@ -487,7 +546,6 @@ instance TAC_convertible Identifier where
                 
     -- Acceso a arreglos (indices)
     toTAC symtable (Index t id exp)  = do
-        label <- getCurrentLabel
         idTAC <- toTAC symtable id 
         expTAC <- toTAC symtable exp 
         newlabel1 <- genNewTemp
@@ -501,6 +559,9 @@ instance TAC_convertible Identifier where
 instance TAC_convertible RightValue where
     toTAC symtable (ValueExp exp) = do
         toTAC symtable exp 
+
+{-   toTACArray symtable (ValueExp exp) = do
+        toTACArray symtable exp-}
 
 --instance TAC_convertible FCall where
     --toTAC symtable (FCall _ t param_list) = do
