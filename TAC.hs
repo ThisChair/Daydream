@@ -1,3 +1,10 @@
+{-|
+Module : TAC
+Authors : Carlos Infante
+          Daniel Varela
+
+Everything concerning the generation and manipulation of Three Address Code
+-}
 module TAC where
 
 import SymTable
@@ -220,6 +227,10 @@ genLabelCode string = Label {name=string}
 genJumpCode :: String -> TAC
 genJumpCode string = Quadruplet {op=OJump,arg1=Just string,arg2=Nothing,result=Nothing}
 
+lookupIdType :: Identifier -> Type
+lookupIdType (Variable t _) = t 
+lookupIdType (Index t _ _) = t
+
 -- Revisa la tabla de simbolos jerarquica y retorna el offset asociado a las variables
 lookupTierTable :: SymTable -> String -> Integer -> Integer
 lookupTierTable symtable varname varscope = case M.lookup varname symtable of -- Revisamos el nombre
@@ -279,10 +290,10 @@ genFlowRelBinOPTAC symtable rel_bin_op exp1 exp2 = do
         newTAC = createIfRegister c t_jump noop f_jump noop Nothing
         in return (newTAC : subTAC)
 
--- Funcion para generaicon de TAC para asignaciones de arreglos
+-- Funcion para generacion de TAC para asignaciones de arreglos
 genArrayTAC :: (String,[[TAC]]) -> State (Int,Int,String,String,String) [TAC]
 genArrayTAC (id,array) = let id_decomposition = [ id ++ "[" ++ (show x) ++ "]" | x <- [0..length array] ] -- Lista de accesos indexados al identificador, id[0]..id[n]
-                             assigments = [ createQuadruplet OAssign x Nothing (Just y) | x <- (L.map getLatestTemp array), y <- id_decomposition ]
+                             assigments = [ createQuadruplet OAssign x Nothing (Just y) | x <- (L.map getLatestTemp array), y <- id_decomposition ] -- Lista de asignaciones id[0],..,id[n] := temp0,..,tempn
                              in return (assigments) 
 
 -- Funcion para generacion de TAC para codigo de funciones
@@ -343,6 +354,7 @@ instance TAC_convertible Instruction where
             newTAC = [ createQuadruplet OAssign (fst x) Nothing (snd x) | x <- assignmentTuples ] -- lista de TACs 'id := rv_temp' :: [TAC]
             newTAC' = [ fst x : snd x | x <- (zip newTAC (reverse idTAC)) ] -- concatenamos la lista de asignaciones con el codigo auxiliar de cada id, en caso de existir :: [ [TAC] | ( TAC,[TAC]) ]
             finalTAC = concat [ fst x ++ snd x | x <- (zip newTAC' (reverse rvTAC)) ] -- finalmente concatenamos el codigo auxiliar de cada right value :: [ [TAC] | ([TAC],[TAC]) ]
+            --idTypeslist = L.map lookupIdType idTAC
             in return finalTAC
 
     -- Selectores 
@@ -538,11 +550,16 @@ instance TAC_convertible Exp where
         return idTAC
 
     -- Booleanas relacionales
+    -- Mayor o igual (>=)
     toTACFlow symtable (EGEq _ exp1 exp2) = genFlowRelBinOPTAC symtable OGEq exp1 exp2
+    -- Mayor (>)
     toTACFlow symtable (EGreat _ exp1 exp2) = genFlowRelBinOPTAC symtable OGreat exp1 exp2
+    -- Menor o igual (<=)
     toTACFlow symtable (ELEq _ exp1 exp2) = genFlowRelBinOPTAC symtable OLEq exp1 exp2
+    -- Menor (<)
     toTACFlow symtable (ELess _ exp1 exp2) = genFlowRelBinOPTAC symtable OLess exp1 exp2
 
+    -- Desigualdad (/=)
     toTACFlow symtable (ENEq _ exp1 exp2) = do -- E -> E1 /= E2
         t_jump <- getTrueCode 
         f_jump <- getFalseCode
@@ -560,6 +577,7 @@ instance TAC_convertible Exp where
             newTAC = createIfRegister c t_jump noop f_jump noop Nothing
             in return (newTAC : subTAC)
 
+    -- Igualdad (==)
     toTACFlow symtable (EEqual _ exp1 exp2) = do -- E -> E1 == E2
         t_jump <- getTrueCode 
         f_jump <- getFalseCode
@@ -578,6 +596,7 @@ instance TAC_convertible Exp where
             in return (newTAC : subTAC)
 
     -- Booleanas
+    -- Disjuncion (||)
     toTACFlow symtable (EOr _ exp1 exp2) = do  -- E -> E1 or E2
         exp1_t_jump <- getTrueCode   -- E1.true := E.true 
         exp1_f_jump <- genNewLabel   -- E2.false := newlabel
@@ -592,6 +611,7 @@ instance TAC_convertible Exp where
         let labelcode = genLabelCode exp1_f_jump
             in return (rightTAC ++ (labelcode : leftTAC))
 
+    -- Conjuncion (&&)
     toTACFlow symtable (EAnd _ exp1 exp2) = do -- E -> E1 and E2
         exp1_t_jump <- genNewLabel  -- E1.true := newlabel
         exp1_f_jump <- getFalseCode -- E1.false := E.false
@@ -606,6 +626,7 @@ instance TAC_convertible Exp where
         let labelcode = genLabelCode exp1_t_jump
             in return (rightTAC ++ (labelcode : leftTAC))
 
+    -- Negacion (!)
     toTACFlow symtable (ENot _ exp) = do -- E -> not E1
         exp_t_jump <- getFalseCode  -- E1.true := E.false
         exp_f_jump <- getTrueCode   -- E1.false := E.true
@@ -614,16 +635,19 @@ instance TAC_convertible Exp where
         expTAC <- toTACFlow symtable exp
         return expTAC
 
+    -- True
     toTACFlow symtable (EToken _ (TTrue _)) = do -- E -> true
         t_jump <- getTrueCode
         return [createQuadruplet OJump (Just t_jump) Nothing Nothing]
 
+    -- False
     toTACFlow symtable (EToken _ (TFalse _)) = do -- E -> false
         f_jump <- getFalseCode
         return [createQuadruplet OJump (Just f_jump) Nothing Nothing]
 
 -- Identificadores
 instance TAC_convertible Identifier where
+    -- Nombres de identificadores
     toTAC symtable (Variable _ (name,scope,_)) -- 'name' contiene el nombre del identificador , 'scope' el alcance asociado 
      | offset == 2 = return [createQuadruplet OIdent Nothing Nothing (Just name)]
      | otherwise = return [createQuadruplet OIdent Nothing Nothing (Just (name++"["++(show offset)++"]"))]
