@@ -33,7 +33,7 @@ data TAC = Quadruplet { op :: Operator
                       , truejumplabel :: String
                       , falsejumplabel :: String
                       , result :: Maybe String } | 
-           Label { name :: String } deriving (Show)
+           Label { name :: String } deriving (Eq, Show)
 
 data Operator = OSum |
                 ODif |
@@ -187,17 +187,28 @@ convertTACtoString (Quadruplet {op=o,arg1=a1,arg2=a2,result=r}) = let a1' = from
 convertTACtoString (Label {name=n}) = convertLabeltoString n
 
 -- Imprime una lista de TAC en un formato legible
-printTAC :: [TAC] -> IO()
-printTAC tacList = do 
-    let tacList' = (L.map convertTACtoString . reverse) tacList
-        tacList'' = [x | x <- tacList', x /= ""]
-        in (putStrLn . unlines) tacList''
+printTAC :: [TAC] -> IO ()
+printTAC tacList = let tacList' = (L.map convertTACtoString . reverse) tacList
+                       tacList'' = [x | x <- tacList', x /= ""]
+                       in (putStrLn . unlines) tacList''
 
 -- Funcion para obtener la string de un tipo Maybe String
 fromJustString :: Maybe String -> String
 fromJustString a = case a of
                     Just x -> x
                     Nothing -> ""
+
+-- Funcion para filtrar varios registros TAC innecesarios para la generacion de codigo final,
+-- en particular todos aquellos referentes a los nombres de identificadores y tokens.
+filterTACList :: [TAC] -> [TAC]
+filterTACList tacList = L.filter filterTAC tacList
+
+filterTAC :: TAC -> Bool
+filterTAC (Quadruplet op _ _ _) 
+ | (op == ONone) || (op == OIdent) = False
+ | otherwise = True
+filterTAC (IfRegister _ _ _ _ _ _) = True
+filterTAC (Label _) = True
 
 --------------------------------------------------------------------------------------
 --------------------------------------------------------------------------------------
@@ -386,6 +397,8 @@ instance TAC_convertible Instruction where
         setFalseCode exp_f_jump
         expTAC <- toTACFlow symtable exp -- TAC de la expresion condicional
         insTAC <- toTAC symtable ins -- S1.next := S1.next, TAC de la instruccion
+        nextcode' <- genNewLabel
+        setNextCode nextcode'
         let labelcode = genLabelCode exp_t_jump -- Etiqueta de la instruccion a ejecutar
             labelcodefinal = genLabelCode nextcode -- Etiqueta de la instruccion siguiente al if
             in return (labelcodefinal : (insTAC ++ (labelcode : expTAC)))
@@ -400,6 +413,8 @@ instance TAC_convertible Instruction where
         expTAC <- toTACFlow symtable exp -- TAC de la expresion condicional
         ins_list1TAC <- toTAC symtable ins1 -- TAC de la instruccion 1
         ins_list2TAC <- toTAC symtable ins2 -- TAC de la instruccion 2
+        nextcode' <- genNewLabel
+        setNextCode nextcode'
         let labelcode1 = genLabelCode exp_t_jump -- Etiqueta de la instruccion 1
             labelcode2 = genLabelCode exp_f_jump -- Etiqueta de la instruccion 2
             jumpcode = genJumpCode nextcode -- Codigo para saltar a la siguiente instruccion
@@ -418,6 +433,8 @@ instance TAC_convertible Instruction where
         setFalseCode exp_f_jump
         expTAC <- toTACFlow symtable exp -- TAC de la expresion condicional
         insTAC <- toTAC symtable ins -- TAC de la instruccion
+        nextcode' <- genNewLabel
+        setNextCode nextcode'
         let labelcodeheader = genLabelCode begin -- Etiqueta del header
             labelcode1 = genLabelCode exp_t_jump -- Etiqueta de la instruccion 1
             jumpcode = genJumpCode begin -- Codigo para saltar devuelta al header
@@ -529,7 +546,6 @@ instance TAC_convertible Exp where
     toTAC symtable (EToken _ (TTrue _)) = return [createQuadruplet ONone Nothing Nothing (Just "true")]
     toTAC symtable (EToken _ (TFalse _)) = return [createQuadruplet ONone Nothing Nothing (Just "false")]
 
-
     -- Identificadores (vistos como expresiones)
     toTAC symtable (EIdent _ id) = do
         idTAC <- toTAC symtable id
@@ -543,6 +559,32 @@ instance TAC_convertible Exp where
     ----- Funciones para Control de flujo -----
     -------------------------------------------
     -------------------------------------------
+
+    -- Binarias
+    -- Suma (+)
+    toTACFlow symtable (ESum _ exp1 exp2) = genBinOpTAC symtable OSum exp1 exp2 
+    -- Resta (-)
+    toTACFlow symtable (EDif _ exp1 exp2) = genBinOpTAC symtable ODif exp1 exp2
+    -- Multiplicacion (*)
+    toTACFlow symtable (EMul _ exp1 exp2) = genBinOpTAC symtable OMul exp1 exp2
+    -- Division (/)
+    toTACFlow symtable (EDiv _ exp1 exp2) = genBinOpTAC symtable ODiv exp1 exp2
+    -- Modulo (%)
+    toTACFlow symtable (EMod _ exp1 exp2) = genBinOpTAC symtable OMod exp1 exp2
+    -- Potencia (**)
+    toTACFlow symtable (EPot _ exp1 exp2 ) = genBinOpTAC symtable OPot exp1 exp2
+    -- Division entera (//)
+    toTACFlow symtable (EDivE _ exp1 exp2 ) = genBinOpTAC symtable ODivE exp1 exp2
+    -- Shift izquierdo (<<)
+    toTACFlow symtable (ELShift _ exp1 exp2 ) = genBinOpTAC symtable OLShift exp1 exp2
+    -- Shift derecho (>>)
+    toTACFlow symtable (ERShift _ exp1 exp2 ) = genBinOpTAC symtable ORShift exp1 exp2
+    -- Disyuncion bit a bit (|)
+    toTACFlow symtable (EBitOr _ exp1 exp2 ) = genBinOpTAC symtable OBitOr exp1 exp2
+    -- Conjuncion bit a bit (&)
+    toTACFlow symtable (EBitAnd _ exp1 exp2 ) = genBinOpTAC symtable OBitAnd exp1 exp2
+    -- XOR bit a bit(^)
+    toTACFlow symtable (EBitXor _ exp1 exp2 ) = genBinOpTAC symtable OBitXor exp1 exp2
 
     -- Tokens (ningun cambio con respecto a los normales)
     -- Numericos
@@ -590,7 +632,7 @@ instance TAC_convertible Exp where
         rightTAC <- toTAC symtable exp2
         let subTAC = rightTAC ++ leftTAC
             falsejump = genJumpCode f_jump
-            newTAC = createIfRegister ONeg (getLatestTemp leftTAC) (getLatestTemp rightTAC) t_jump f_jump Nothing
+            newTAC = createIfRegister ONEq (getLatestTemp leftTAC) (getLatestTemp rightTAC) t_jump f_jump Nothing
             in return (falsejump : newTAC : subTAC)
 
     -- Igualdad (==)
@@ -607,7 +649,7 @@ instance TAC_convertible Exp where
         rightTAC <- toTAC symtable exp2
         let subTAC = rightTAC ++ leftTAC
             falsejump = genJumpCode f_jump
-            newTAC = createIfRegister ONeg (getLatestTemp leftTAC) (getLatestTemp rightTAC) t_jump f_jump Nothing
+            newTAC = createIfRegister OEqual (getLatestTemp leftTAC) (getLatestTemp rightTAC) t_jump f_jump Nothing
             in return (falsejump : newTAC : subTAC)
 
     -- Booleanas

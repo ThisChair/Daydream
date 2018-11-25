@@ -21,12 +21,14 @@ import Lexer
 import Parser
 import SymTable
 import TAC
+import TargetCode
 
 data Flag =
     Lexer        |
     Parser       |
     Table        |
     Intermediate |
+    Target       | 
     Help
     deriving (Eq,Ord,Enum,Show,Bounded)
 
@@ -35,7 +37,8 @@ flags =
     ,Option ['p'] ["parser"]       (NoArg Parser)       "Runs the syntax analyzer and prints the syntax tree."
     ,Option ['t'] ["table"]        (NoArg Table)        "Runs the syntax analyzer and prints the symtable."
     ,Option ['h'] ["help"]         (NoArg Help)         "Prints this help message."
-    ,Option ['i'] ["intermediate"] (NoArg Intermediate) "Prints three address code"
+    ,Option ['i'] ["intermediate"] (NoArg Intermediate) "Prints three address code."
+    ,Option ['f'] ["target"]       (NoArg Target)       "Prints target code."
     ]
 
 -- |Parses the command line options.
@@ -74,7 +77,7 @@ filePath (x:_) = case reverse x of
         exitWith (ExitFailure 1)
 
 -- | Prints a token list.
-printTokList :: [Token] -> IO()
+printTokList :: [Token] -> IO ()
 printTokList list = mapM_ putStrLn $ map show list
 
 -- | Depending on options, prints token list and lexical errors.
@@ -107,7 +110,7 @@ reportRes (Right t) opts = if Parser `elem` opts
     else return t
 
 -- | Process syntax errors.
-syntaxErrors :: [String] -> IO()
+syntaxErrors :: [String] -> IO ()
 syntaxErrors es = case (length es) of
     0 -> return ()
     n -> do
@@ -116,18 +119,27 @@ syntaxErrors es = case (length es) of
         exitWith (ExitFailure 1)
 
 -- | Depending on options, may print the symbol table.
-printSym :: SymTable -> [Flag] -> IO()
+printSym :: SymTable -> [Flag] -> IO ()
 printSym s opts = if Table `elem` opts
     then putStrLn (show s)
     else return ()
 
 -- | Generates TAC for the syntax tree.
-generateTAC :: (TAC_convertible a) => a -> SymTable -> [Flag] -> IO ()
-generateTAC tree symtable opts = if Intermediate `elem` opts
-    then printTAC (evalState (toTAC symtable tree) (0,-1,"","",""))
+generateTAC :: (TAC_convertible a) => a -> SymTable -> [Flag] -> [TAC]
+generateTAC tree symtable opts = (evalState (toTAC symtable tree) (0,-1,"","",""))
+
+printTAC' :: [TAC] -> [Flag] -> IO ()
+printTAC' tac_list opts = if Intermediate `elem` opts
+    then printTAC tac_list
     else return ()
 
-main :: IO()
+-- | Generates Target code for the Three Adress Code.
+generateTargetCode :: [TAC] -> [Flag] -> IO ()
+generateTargetCode tac_list opts = if Target `elem` opts
+    then (printEnumeratedTAC . genTargetCode . filterTACList . reverse) tac_list
+    else return ()
+
+main :: IO ()
 main = do
     (opts,file) <- getArgs >>= parse
     handle <- openFile file ReadMode  
@@ -140,4 +152,7 @@ main = do
     syntaxErrors w
     t <- reportRes p opts
     printSym s opts
-    generateTAC t s opts
+    let tac_list = generateTAC t s opts
+        in do 
+            printTAC' tac_list opts
+            generateTargetCode tac_list opts
