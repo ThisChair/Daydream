@@ -136,7 +136,7 @@ printTAC' tac_list opts = if Intermediate `elem` opts
 -- | Generates Target code for the Three Adress Code.
 generateTargetCode :: [TAC] -> [Flag] -> IO ()
 generateTargetCode tac_list opts = if Target `elem` opts
-    then (printEnumeratedTAC . genTargetCode . filterTACList . reverse) tac_list
+    then (print . genTargetCode . filterTACList . reverse) tac_list
     else return ()
 
 main :: IO ()

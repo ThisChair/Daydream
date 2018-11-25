@@ -33,7 +33,7 @@ data TAC = Quadruplet { op :: Operator
                       , truejumplabel :: String
                       , falsejumplabel :: String
                       , result :: Maybe String } | 
-           Label { name :: String } deriving (Eq, Show)
+           Label { name :: String} deriving (Eq, Show)
 
 data Operator = OSum |
                 ODif |

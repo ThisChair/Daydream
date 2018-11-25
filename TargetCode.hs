@@ -12,14 +12,31 @@ import TAC
 
 import Data.Graph as G
 import Data.List as L
+import Data.Map.Strict as M
 
 -- Data type representing a Basic Block structure
 data BasicBlock = Block { block_num :: Int 
                         , ins_list :: [TAC] } deriving (Show)
 
+type RangeTable = Map String (Int,Int)
+
+buildRangeTable :: RangeTable -> (Int,TAC) -> RangeTable
+buildRangeTable range_table (line,tac) = L.foldl addRange range_table vars_to_check
+    where vars_to_check = case tac of
+                           (Quadruplet OJump _ _ _) -> [Nothing]
+                           (Quadruplet _ arg1 arg2 result) -> [arg1,arg2,result]
+                           (IfRegister _ arg1 arg2 _ _ _) -> [arg1,arg2]
+                           (Label _) -> [Nothing]
+          addRange t var = case var of
+                          Nothing -> t
+                          Just x -> case M.lookup x t of
+                                     Nothing -> M.insert x (line,line) t
+                                     Just (i,j) -> M.insert x (i,line) t
+
 -- Generates target code
-genTargetCode :: [TAC] -> [(Int,TAC)]
-genTargetCode tac_list = enumerateTAC tac_list
+genTargetCode :: [TAC] -> RangeTable
+genTargetCode tac_list = L.foldl buildRangeTable (M.empty) enum_tac
+    where enum_tac = enumerateTAC tac_list
 --genTargetCode tac_list = genBasicBlocks (partitionTACList' tac_list)
 
 partitionTACList' :: [TAC] -> [[TAC]]
