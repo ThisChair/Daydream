@@ -130,7 +130,7 @@ typeString (Pointer _ _) = "_pointer"
 data Identifier
     -- | Variable name, scope and position.
     = Variable Type (String,Integer,AlexPosn)
-    -- | Index operation over an identifier.
+    -- | Index operation over an identifier.  
     | Index Type Identifier Exp
     -- | Member call over an identifier.
     | MemberCall Type Identifier [Token]
@@ -248,12 +248,12 @@ instance Show Type where
     show TypeVoid = "Void"
     show TypeError = "Type Error"
     show TypeType = "Type"
-    show (TypeArray t n) = "Array of " ++ (show t) ++ " of size " ++ n
-    show (TypeList t) = "List of " ++ (show t)
-    show (TypeDict k v) = "Dictionary of pairs (" ++ (show k) ++ ", " ++ (show v) ++ ")"
-    show (TypeTuple t) = "Tuple of: " ++ (show t)
-    show (TypeFunc a r) = "Function from " ++ (show a) ++ " to " ++ (show r)
-    show (TypePointer t) = "Pointer of " ++ (show t)
+    show (TypeArray t n) = "Array of " ++ show t ++ " of size " ++ n
+    show (TypeList t) = "List of " ++ show t
+    show (TypeDict k v) = "Dictionary of pairs (" ++ show k ++ ", " ++ show v ++ ")"
+    show (TypeTuple t) = "Tuple of: " ++ show t
+    show (TypeFunc a r) = "Function from " ++ show a ++ " to " ++ show r
+    show (TypePointer t) = "Pointer of " ++ show t
     show (TypeData s) = s
 
 -- Funciones para retorno de tipos -- 
@@ -349,6 +349,6 @@ instance AST FCall where
 
 -- | Checks that the type in a list of expressions is unique.
 expsType :: [Exp] -> Type
-expsType es = case (nub $ map returnType es) of
+expsType es = case nub $ map returnType es of
     t:[] -> t
     _ -> TypeError
