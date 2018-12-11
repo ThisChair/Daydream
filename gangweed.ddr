@@ -1,0 +1,12 @@
+Int a = 0;
+Int b = 1;
+
+a = b + 2 - 3 * 4;
+
+{Int:4} riseup;
+
+riseup[0] = a;
+
+while ((3 < 5) || false)
+    b = 2;
+

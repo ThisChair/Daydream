@@ -16,6 +16,7 @@ import Data.List
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Writer.Lazy
+import Control.Monad(when)
 
 import Lexer
 import Parser
@@ -41,14 +42,13 @@ flags =
 -- |Parses the command line options.
 parse :: [String] -> IO ([Flag],String)
 parse argv = case getOpt Permute flags argv of
-    (args,fs,[]) -> do
-        if Help `elem` args
-            then do 
-                hPutStrLn stderr (usageInfo header flags)
-                exitWith ExitSuccess
-            else do
-                file <- filePath fs
-                return (nub args, file)
+    (args,fs,[]) -> if Help `elem` args
+        then do 
+            hPutStrLn stderr (usageInfo header flags)
+            exitSuccess
+        else do
+            file <- filePath fs
+            return (nub args, file)
     (_,_,errs) -> do
         hPutStrLn stderr (concat errs ++ usageInfo header flags)
         exitWith (ExitFailure 1)
@@ -75,7 +75,7 @@ filePath (x:_) = case reverse x of
 
 -- | Prints a token list.
 printTokList :: [Token] -> IO()
-printTokList list = mapM_ putStrLn $ map show list
+printTokList = mapM_ print
 
 -- | Depending on options, prints token list and lexical errors.
 lexOption :: [Token] -> [Token] -> [Flag] -> IO [Token]
@@ -84,48 +84,41 @@ lexOption toks inv opts =
         [] -> if Lexer `elem` opts
             then do
                 printTokList toks
-                exitWith ExitSuccess
+                exitSuccess
             else return toks
-        et -> if Lexer `elem` opts
-            then do 
-                printTokList toks
-                putStrLn $ (show . length $ inv) ++ "lexical errors found:"
-                printTokList inv
-                exitWith (ExitFailure 1)
-            else do 
-                putStrLn $ (show . length $ inv) ++ "lexical errors found:"
-                printTokList inv
-                exitWith (ExitFailure 1)
+        et -> do 
+            when (Lexer `elem` opts) $ printTokList toks
+            putStrLn $ (show . length $ inv) ++ "lexical errors found:"
+            printTokList inv
+            exitWith (ExitFailure 1)
 
 -- | Unwraps the tree from the error.
 reportRes :: Show a => Either String a -> [Flag] -> IO a
 reportRes (Left e) _ = putStrLn ("Error: " ++ show e) >> exitWith (ExitFailure 1)
 reportRes (Right t) opts = if Parser `elem` opts
     then do
-        putStrLn (show t)
-        exitWith ExitSuccess
+        print t
+        exitSuccess
     else return t
 
 -- | Process syntax errors.
 syntaxErrors :: [String] -> IO()
-syntaxErrors es = case (length es) of
+syntaxErrors es = case length es of
     0 -> return ()
     n -> do
-        putStrLn $ (show n) ++ " syntax errors found:"
+        putStrLn $ show n ++ " syntax errors found:"
         mapM_ putStrLn es
         exitWith (ExitFailure 1)
 
 -- | Depending on options, may print the symbol table.
 printSym :: SymTable -> [Flag] -> IO()
-printSym s opts = if Table `elem` opts
-    then putStrLn (show s)
-    else return ()
+printSym s opts = when (Table `elem` opts) $ print s
 
 -- | Generates TAC for the syntax tree.
 generateTAC :: (TAC_convertible a) => a -> SymTable -> [Flag] -> IO ()
-generateTAC tree symtable opts = if Intermediate `elem` opts
-    then printTAC (evalState (toTAC symtable tree) (0,-1,"","",""))
-    else return ()
+generateTAC tree symtable opts = when (Intermediate `elem` opts) $ printTAC getTAC
+  where
+    getTAC = evalState (toTAC symtable tree) (0,-1,"","","")
 
 main :: IO()
 main = do

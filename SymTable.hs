@@ -16,7 +16,7 @@ import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Writer.Lazy
 import Control.Monad.Trans.Class(lift)
 import Control.Monad.IO.Class(liftIO)
-import Control.Monad(zipWithM_,zipWithM)
+import Control.Monad(zipWithM_,zipWithM,when)
 
 import Lexer
 import SyntaxTree
@@ -26,12 +26,18 @@ import Utils
 type SymTable = Map String (Map Integer SymScope)
 
 -- | Data of a variable.
-data SymScope = SymScope { scope    :: Integer        -- ^ Scope number of the variable.
-                         , typeS    :: (Type,Integer) -- ^ Type of the variable and its scope.
-                         , otherS   :: [Instruction]  -- ^ List of instructions of a function scope.
-                         , pos      :: AlexPosn       -- ^ Position of the variable.
-                         } 
-                         deriving (Show, Eq)
+data SymScope
+    = SymScope { scope    :: Integer        -- ^ Scope number of the variable.
+               , typeS    :: (Type,Integer) -- ^ Type of the variable and its scope.
+               , otherS   :: [Instruction]  -- ^ List of instructions of a function scope.
+               , pos      :: AlexPosn       -- ^ Position of the variable.
+               }
+    | VarScope { }
+    | FunScope { varname :: String
+               , typeS   :: (Type,Integer)
+               , fins    :: [Instruction]
+               } 
+    deriving (Show, Eq)
 
 -- | Translation from string to Type.
 readType :: String -> Type
@@ -84,18 +90,18 @@ push x xs = x:xs
 
 -- | Insert or modify a SymScope indexed by an String.
 insertSym :: String -> SymScope -> SymTable -> SymTable
-insertSym elem elemScope table = 
-        M.insertWith (M.union) elem newSym table
+insertSym elem elemScope = 
+        M.insertWith M.union elem newSym
     where
         newSym = M.fromList [(scope elemScope,elemScope)]
 
 -- | Similar to insertSym, but receives the String and SymScope as a tuple.
 insertSym' :: (String,SymScope) -> SymTable -> SymTable
-insertSym' (elem,elemScope) table = insertSym elem elemScope table
+insertSym' (elem,elemScope) = insertSym elem elemScope
 
 -- | Updates the instruction list of a function.
 updateIns :: String -> Integer -> [Instruction] -> SymTable -> SymTable
-updateIns id s newins sym = case (M.lookup id sym >>= (\x -> M.lookup s x)) of
+updateIns id s newins sym = case M.lookup id sym >>= M.lookup s of
     Just (SymScope i (TypeFunc intype outype,_) ins pos) -> 
         insertSym id (SymScope i (TypeFunc intype outype,0) (ins++newins) pos) sym
 
@@ -112,11 +118,11 @@ lookupTable' elem (table,stack,_) = lookupTable elem table stack
 -- | Looks for the correct Scope in the chain.
 checkChain :: Stack -> Maybe (Map Integer SymScope) -> Maybe SymScope
 checkChain stack Nothing = Nothing
-checkChain stack (Just chain) = case (M.lookup 0 chain) of 
+checkChain stack (Just chain) = case M.lookup 0 chain of 
     (Just x) -> Just x
     Nothing -> search filtered_stack
         where
-            filtered_stack = L.filter (\x -> elem (actualScope x) (keys chain)) stack 
+            filtered_stack = L.filter (\x -> actualScope x  `elem` keys chain) stack 
             search [] = Nothing
             search l  = M.lookup ((actualScope . head) filtered_stack) chain
 
@@ -131,18 +137,18 @@ noPos = AlexPn 0 0 0
 -- | Scope 0 (pervasive).
 scopeZero :: [(String,SymScope)]
 scopeZero = [
-    ("Type",  (SymScope 0 (TypeType,0) [] noPos)),
-    ("Unit",  (SymScope 0 (TypeType,0) [] noPos)),
-    ("Int",   (SymScope 0 (TypeType,0) [] noPos)),
-    ("Float", (SymScope 0 (TypeType,0) [] noPos)),
-    ("Char",  (SymScope 0 (TypeType,0) [] noPos)),
-    ("String",(SymScope 0 (TypeType,0) [] noPos)),
-    ("Bool",  (SymScope 0 (TypeType,0) [] noPos)),
-    ("_list", (SymScope 0 (TypeType,0) [] noPos)),
-    ("_tuple",(SymScope 0 (TypeType,0) [] noPos)),
-    ("_array",(SymScope 0 (TypeType,0) [] noPos)),
-    ("_dict", (SymScope 0 (TypeType,0) [] noPos)),
-    ("_ptr",  (SymScope 0 (TypeType,0) [] noPos))
+    ("Type",   SymScope 0 (TypeType,0) [] noPos),
+    ("Unit",   SymScope 0 (TypeType,0) [] noPos),
+    ("Int",    SymScope 0 (TypeType,0) [] noPos),
+    ("Float",  SymScope 0 (TypeType,0) [] noPos),
+    ("Char",   SymScope 0 (TypeType,0) [] noPos),
+    ("String", SymScope 0 (TypeType,0) [] noPos),
+    ("Bool",   SymScope 0 (TypeType,0) [] noPos),
+    ("_list",  SymScope 0 (TypeType,0) [] noPos),
+    ("_tuple", SymScope 0 (TypeType,0) [] noPos),
+    ("_array", SymScope 0 (TypeType,0) [] noPos),
+    ("_dict",  SymScope 0 (TypeType,0) [] noPos),
+    ("_ptr",   SymScope 0 (TypeType,0) [] noPos)
     ]
 
 -- | Scope 1 for language constants. Still unused.
@@ -174,7 +180,7 @@ getScopeNumber = do
 -- | Gets the actual scope number from the Stack.
 getActualScope :: Monad m => StateT ScopeStack m Integer
 getActualScope = do
-    (_,(s:_),_) <- get
+    (_,s:_,_) <- get
     return (actualScope s)
 
 -- | Gets scope number for the scope at depth n.
@@ -193,7 +199,7 @@ pushS = modify . modifyStack . push
 
 -- | Stack pop operation in the state.
 popS :: Monad m => StateT ScopeStack m ()
-popS = modify $ modifyStack $ pop
+popS = modify $ modifyStack pop
 
 -- | Insert symbol into SymTable from state.
 insertSymS :: Monad m => String -> SymScope -> StateT ScopeStack m ()
@@ -207,30 +213,30 @@ insertIns id s ins = lift $ modify . modifySymTable $ updateIns id s ins
 searchTable :: String -> ParseMonad (String,Integer,AlexPosn)
 searchTable id = do
     ss <- lift get
-    case (lookupTable' id ss) of
+    case lookupTable' id ss of
         Just sym -> return (id,scope sym, pos sym)
         Nothing -> do
-            lift $ lift $ tell $ ["Undeclared symbol: " ++ id]
+            lift $ lift $ tell ["Undeclared symbol: " ++ id]
             return (id,-1, noPos)
 
 -- | Search for symbol with an specific type in the table.
 searchTable' :: String -> ParseMonad ((String,Integer,AlexPosn),Type)
 searchTable' id = do
     ss <- lift get
-    case (lookupTable' id ss) of
+    case lookupTable' id ss of
         Just sym -> return ((id,scope sym, pos sym), fst $ typeS sym)
         Nothing -> do
-            lift $ lift $ tell $ ["Undeclared symbol: " ++ id]
+            lift $ lift $ tell ["Undeclared symbol: " ++ id]
             return ((id,-1, noPos),TypeError)
 
 -- | Search or a type in the table.
 searchType :: String -> ParseMonad (String,Integer)
 searchType id = do
     ss <- lift get
-    case (lookupTable' id ss) of
+    case lookupTable' id ss of
         Just sym -> return (id,scope sym)
         Nothing -> do
-            lift $ lift $ tell $ ["Unexistent type: " ++ id]
+            lift $ lift $ tell ["Unexistent type: " ++ id]
             return (id,-1)
 
 -- | Get the type specific entry in the table.
@@ -261,23 +267,21 @@ isPervasive id (sym,_,_) = case search of
     Just _ -> True
     Nothing -> False
   where
-    search = M.lookup id sym >>= (\x -> M.lookup 0 x)
+    search = M.lookup id sym >>= M.lookup 0
 
 -- | Error if a name is in scope 0.
 pervasiveCheck :: String -> AlexPosn -> ParseMonad ()
 pervasiveCheck id (AlexPn _ i j) = do
     ss <- lift get
-    if (isPervasive id ss) 
-        then (lift $ lift $ tell $ errMsg) 
-        else return ()
+    when (isPervasive id ss) $ lift $ lift $ tell errMsg
   where
-    errMsg = [(showPos i j) ++ ": " ++ id ++ " is a reserved name and can not be used." ]
+    errMsg = [showPos i j ++ ": " ++ id ++ " is a reserved name and can not be used." ]
 
 -- | Checks if a name has already been declared in an scope.
 redeclaredCheck :: String -> Integer -> AlexPosn -> ParseMonad ()
 redeclaredCheck id scope (AlexPn _ i j) = do
         (sym,_,_) <- lift get
-        let search = M.lookup id sym >>= (\x -> M.lookup scope x)
+        let search = M.lookup id sym >>= M.lookup scope
         case search of
             Just ss -> lift $ lift $ redeclaredError id i j (pos ss)
             Nothing -> return ()
@@ -286,57 +290,57 @@ redeclaredCheck id scope (AlexPn _ i j) = do
 redeclaredError :: Monad m => String -> Int -> Int -> AlexPosn -> WriterT [String] m ()
 redeclaredError id i j (AlexPn _ i' j') = tell errMsg
   where
-    errMsg = [(showPos i j) ++ ": " ++ id ++ " already declared at: " ++ (showPos i' j')]
+    errMsg = [showPos i j ++ ": " ++ id ++ " already declared at: " ++ showPos i' j']
 
 -- | Checks if a number is an integer or a float.
 getNumType :: String -> Type
-getNumType n = if (elem '.' n) then TypeFloat else TypeInt
+getNumType n = if '.' `elem` n then TypeFloat else TypeInt
 
 -- | Checks the homogeneity of a list and returns its type.
 checkListType :: [Exp] -> AlexPosn -> ParseMonad Type
-checkListType es (AlexPn _ i j) = case (expsType es) of
+checkListType es (AlexPn _ i j) = case expsType es of
     TypeError -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ " Elements of a list must be of the same type."]
+        lift $ lift $ tell [showPos i j ++ ": " ++ " Elements of a list must be of the same type."]
         return TypeError
     t -> return $ TypeList t
 
 -- | Checks the homogeneity of an array and returns its type.
 checkArrType :: [Exp] -> AlexPosn -> ParseMonad Type
-checkArrType es (AlexPn _ i j) = case (expsType es) of
+checkArrType es (AlexPn _ i j) = case expsType es of
     TypeError -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ " Elements of an array must be of the same type."]
+        lift $ lift $ tell [showPos i j ++ ": " ++ " Elements of an array must be of the same type."]
         return TypeError
     t -> return $ TypeArray t (show $ length es)
 
 -- | Checks the homogeneity of keys and elements of a dictionary and returns its type.
 checkDictType :: [(Exp,Exp)] -> AlexPosn -> ParseMonad Type
-checkDictType es (AlexPn _ i j) = case (expsType $ P.map fst es) of
+checkDictType es (AlexPn _ i j) = case expsType $ P.map fst es of
     TypeError -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Keys of a dictionary must be of the same type."]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Keys of a dictionary must be of the same type."]
         return TypeError
-    tk -> case (expsType $ P.map snd es) of
+    tk -> case expsType $ P.map snd es of
         TypeError -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Elements of a dictionary must be of the same type."]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Elements of a dictionary must be of the same type."]
             return TypeError
         tv -> return $ TypeDict tk tv
 
 -- | Returns the type of a tuple.
 checkTupType :: [Exp] -> AlexPosn -> ParseMonad Type
-checkTupType es (AlexPn _ i j) = if (elem TypeError (P.map returnType es)) 
+checkTupType es (AlexPn _ i j) = if TypeError `elem` P.map returnType es
     then return TypeError
     else return $ TypeTuple (P.map returnType es)
 
 -- | Check numeric binary operations.
 checkNumBin :: Exp -> Exp -> AlexPosn -> ParseMonad Type
-checkNumBin l r (AlexPn _ i j) = case (returnType l) of
-    TypeInt -> case (returnType r) of
+checkNumBin l r (AlexPn _ i j) = case returnType l of
+    TypeInt -> case returnType r of
         TypeInt -> return TypeInt
         TypeFloat -> return TypeFloat
         TypeError -> return TypeError
         t -> do
             lift $ lift $ tell (rightErr t)
             return TypeError
-    TypeFloat -> case (returnType r) of
+    TypeFloat -> case returnType r of
         TypeInt -> return TypeFloat
         TypeFloat -> return TypeFloat
         TypeError -> return TypeError
@@ -348,110 +352,110 @@ checkNumBin l r (AlexPn _ i j) = case (returnType l) of
         lift $ lift $ tell (leftErr t)
         return TypeError
   where
-    rightErr t = [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
-    leftErr t = [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as left operand."]
+    rightErr t = [showPos i j ++ ": " ++ "Expected numeric type, but got " ++ show t ++ " as right operand."]
+    leftErr t = [showPos i j ++ ": " ++ "Expected numeric type, but got " ++ show t ++ " as left operand."]
 
 -- | Check int-only operations.
 checkIntBin :: Exp -> Exp -> AlexPosn -> ParseMonad Type
-checkIntBin l r (AlexPn _ i j) = case (returnType l) of
-    TypeInt -> case (returnType r) of
+checkIntBin l r (AlexPn _ i j) = case returnType l of
+    TypeInt -> case returnType r of
         TypeInt -> return TypeInt
         TypeError -> return TypeError
         t -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Int, but got " ++ (show t) ++ " as right operand."]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Expected Int, but got " ++ show t ++ " as right operand."]
             return TypeError
     TypeError -> return TypeError
     t -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Int, but got " ++ (show t) ++ " as left operand."]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expected Int, but got " ++ show t ++ " as left operand."]
         return TypeError
 
 -- | Check unary numeric operations.
 checkNumUn :: Exp -> AlexPosn -> ParseMonad Type
-checkNumUn e (AlexPn _ i j) = case (returnType e) of
+checkNumUn e (AlexPn _ i j) = case returnType e of
     TypeInt -> return TypeInt
     TypeFloat -> return TypeFloat
     TypeError -> return TypeError
     t -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t)]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expected numeric type, but got " ++ show t]
         return TypeError
 
 -- | Check unary boolean operations.
 checkBoolUn :: Exp -> AlexPosn -> ParseMonad Type
-checkBoolUn e (AlexPn _ i j) = case (returnType e) of
+checkBoolUn e (AlexPn _ i j) = case returnType e of
     TypeBool -> return TypeBool
     TypeError -> return TypeError
     t -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Bool, but got " ++ (show t)]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expected Bool, but got " ++ show t]
         return TypeError
 
 -- | Check binary boolean operations.
 checkBoolBin :: Exp -> Exp -> AlexPosn -> ParseMonad Type
-checkBoolBin l r (AlexPn _ i j) = case (returnType l) of
-    TypeBool -> case (returnType r) of
+checkBoolBin l r (AlexPn _ i j) = case returnType l of
+    TypeBool -> case returnType r of
         TypeBool -> return TypeBool
         TypeError -> return TypeError
         t -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Bool, but got " ++ (show t) ++ " as right operand."]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Expected Bool, but got " ++ show t ++ " as right operand."]
             return TypeError
     TypeError -> return TypeError
     t -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Bool, but got " ++ (show t) ++ " as left operand."]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expected Bool, but got " ++ show t ++ " as left operand."]
         return TypeError
 
 -- | Checks numeric comparisons.
 checkNumComp :: Exp -> Exp -> AlexPosn -> ParseMonad Type
-checkNumComp l r (AlexPn _ i j) = case (returnType l) of
-    TypeInt -> case (returnType r) of
+checkNumComp l r (AlexPn _ i j) = case returnType l of
+    TypeInt -> case returnType r of
         TypeInt -> return TypeBool
         TypeFloat -> return TypeBool
         TypeError -> return TypeError
         t -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Expected numeric type, but got " ++ show t ++ " as right operand."]
             return TypeError
-    TypeFloat -> case (returnType r) of
+    TypeFloat -> case returnType r of
         TypeInt -> return TypeBool
         TypeFloat -> return TypeBool
         TypeError -> return TypeError
         t -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Expected numeric type, but got " ++ show t ++ " as right operand."]
             return TypeError
     TypeError -> return TypeError
     t -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as left operand."]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expected numeric type, but got " ++ show t ++ " as left operand."]
         return TypeError
 
 -- | Checks valid comparable types.
 checkComp :: Exp -> Exp -> AlexPosn -> ParseMonad Type
-checkComp l r (AlexPn _ i j) = case (returnType l) of
-    TypeInt -> case (returnType r) of
+checkComp l r (AlexPn _ i j) = case returnType l of
+    TypeInt -> case returnType r of
         TypeInt -> return TypeBool
         TypeFloat -> return TypeBool
         TypeBool -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected equal types, but got Int as left operand and Bool as right operand."]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Expected equal types, but got Int as left operand and Bool as right operand."]
             return TypeError
         TypeError -> return TypeError
         t -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Expected numeric type, but got " ++ show t ++ " as right operand."]
             return TypeError
-    TypeFloat -> case (returnType r) of
+    TypeFloat -> case returnType r of
         TypeInt -> return TypeBool
         TypeFloat -> return TypeBool
         TypeBool -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected equal types, but got Int as left operand and Bool as right operand."]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Expected equal types, but got Int as left operand and Bool as right operand."]
             return TypeError
         TypeError -> return TypeError
         t -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected numeric type, but got " ++ (show t) ++ " as right operand."]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Expected numeric type, but got " ++ show t ++ " as right operand."]
             return TypeError
-    TypeBool -> case (returnType r) of
+    TypeBool -> case returnType r of
         TypeBool -> return TypeBool
         TypeError -> return TypeError
         t -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected Bool, but got " ++ (show t) ++ " as right operand."]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Expected Bool, but got " ++ show t ++ " as right operand."]
             return TypeError
     TypeError -> return TypeError
     t -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected comparable type, but got " ++ (show t) ++ " as left operand."]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expected comparable type, but got " ++ show t ++ " as left operand."]
         return TypeError
 
 -- | If-Then instruction type check.
@@ -461,10 +465,10 @@ checkIf cond ins (AlexPn _ i j) = case (returnType cond, returnType ins) of
     (TypeError, _) -> return TypeError
     (_, TypeError) -> return TypeError
     (t, TypeVoid) -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected bool in if condition, but got " ++ (show t)]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expected bool in if condition, but got " ++ show t]
         return TypeError
     (TypeBool, t) -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expression of type " ++ (show t) ++ "when expecting instruction."]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expression of type " ++ show t ++ "when expecting instruction."]
         return TypeError
 
 -- | If-Then-Else instruction type check.
@@ -475,24 +479,24 @@ checkIfE cond ins inE (AlexPn _ i j) = case (returnType cond, returnType ins, re
     (_, TypeError, _) -> return TypeError
     (_, _, TypeError) -> return TypeError
     (t, TypeVoid, TypeVoid) -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expected bool in if condition, but got " ++ (show t)]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expected bool in if condition, but got " ++ show t]
         return TypeError
     (TypeBool, t, TypeVoid) -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expression of type " ++ (show t) ++ "when expecting instruction."]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expression of type " ++ show t ++ "when expecting instruction."]
         return TypeError
     (TypeBool, TypeVoid, t) -> do
-        lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expression of type " ++ (show t) ++ "when expecting instruction."]
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expression of type " ++ show t ++ "when expecting instruction."]
         return TypeError
 
 -- | Checks type compatibility of the RValue with the LValue.
 checkDAssign :: Type -> RightValue -> AlexPosn -> ParseMonad Type
 checkDAssign TypeError _ _ = return TypeError
-checkDAssign t (ValueExp e) (AlexPn _ i j) = case (returnType e) of
+checkDAssign t (ValueExp e) (AlexPn _ i j) = case returnType e of
     TypeError -> return TypeError
     x -> if t == x
         then return TypeVoid
         else do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Can't assign " ++ (show x) ++ " to " ++ (show t)]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Can't assign " ++ show x ++ " to " ++ show t]
             return TypeError
 checkDAssign t (ValueCons c) (AlexPn _ i j) = return TypeError
 
@@ -500,51 +504,51 @@ checkDAssign t (ValueCons c) (AlexPn _ i j) = return TypeError
 assignType :: ([Identifier],[RightValue]) -> Type
 assignType (ids,_) = if hasError then TypeError else TypeVoid
     where
-        hasError = elem TypeError (P.map returnType ids)
+        hasError = TypeError `elem` P.map returnType ids
 
 -- | Check that, when indexing, the type is indexable.
 checkIndex :: String -> Exp -> AlexPosn -> ParseMonad Type
 checkIndex id e (AlexPn _ i j) = do
     (_,t) <- searchTable' id
-    case (returnType e) of
+    case returnType e of
         TypeError -> return TypeError
         TypeInt -> case t of
             TypeArray at _ -> return at
             TypeList lt -> return lt
             TypeError -> return TypeError
             te -> do
-                lift $ lift $ tell [(showPos i j) ++ ": " ++ "Not indexable type: " ++ (show te)]
+                lift $ lift $ tell [showPos i j ++ ": " ++ "Not indexable type: " ++ show te]
                 return TypeError
         te -> do
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Expecting index by integers, but instead got " ++ (show te)]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Expecting index by integers, but instead got " ++ show te]
             return TypeError
 
 -- | Checks type of multiple assigns.
 checkAssign :: ([Identifier],[RightValue]) -> ParseMonad Type
 checkAssign (ids,rvs) = do
     ts <- zipWithM checkSingle ids rvs
-    if (elem TypeError ts) then (return TypeError) else (return TypeVoid)
+    if TypeError `elem` ts then return TypeError else return TypeVoid
 
 -- | Checks type of single assign.
 checkSingle :: Identifier -> RightValue -> ParseMonad Type
-checkSingle (Variable t (id,_,(AlexPn _ i j))) (ValueExp e) = case (t,returnType e) of
+checkSingle (Variable t (id,_,AlexPn _ i j)) (ValueExp e) = case (t,returnType e) of
     (TypeError,_) -> return TypeError
     (_, TypeError) -> return TypeError
     (TypeFloat, TypeInt) -> return TypeVoid  
-    (t,te) -> if (t == te) 
+    (t,te) -> if t == te 
         then return TypeVoid
         else do 
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Variable " ++ id ++ " of type " ++ (show t) ++ " can't be assigned with type " ++ (show te)]
+            lift $ lift $ tell [showPos i j ++ ": " ++ "Variable " ++ id ++ " of type " ++ show t ++ " can't be assigned with type " ++ show te]
             return TypeError
 checkSingle _ _ = return TypeError
 
 -- | Check the function call type.
 checkFunCall :: String -> [Exp] -> AlexPosn -> ParseMonad Type
 checkFunCall id pars (AlexPn _ i j) = do
-    (_,t) <- (searchTable' id)    
+    (_,t) <- searchTable' id
     case t of 
         TypeError -> return TypeError
-        TypeFunc args ret -> if ((P.map returnType pars) == args)
+        TypeFunc args ret -> if P.map returnType pars == args
             then case ret of
                 [] -> return TypeVoid
                 [x] -> return x
@@ -553,25 +557,24 @@ checkFunCall id pars (AlexPn _ i j) = do
                 lift $ lift $ tell $ errorMsg args
                 return TypeError
   where
-    errorMsg args = [(showPos i j) ++ ": " ++ "Calling function " ++ id ++ " with parameters of types " ++ (show (P.map returnType pars)) ++ " while expecting types " ++ (show args) ]
+    errorMsg args = [showPos i j ++ ": " ++ "Calling function " ++ id ++ " with parameters of types " ++ show (P.map returnType pars) ++ " while expecting types " ++ show args ]
 
 -- | Check that a function called as an instruction has no return type.
 checkIFunCall :: FCall -> ParseMonad Type
-checkIFunCall (FCall t id _)  = do   
-    case t of 
-        TypeError -> return TypeError
-        TypeVoid -> return TypeVoid
-        _ -> do            
-            let (AlexPn _ i j) = tokenPos id
-            lift $ lift $ tell [(showPos i j) ++ ": " ++ "Function " ++ (tokenVal id) ++ " with return type " ++ (show t) ++ " where none expected." ]
-            return TypeError
+checkIFunCall (FCall t id _)  = case t of 
+    TypeError -> return TypeError
+    TypeVoid -> return TypeVoid
+    _ -> do            
+        let (AlexPn _ i j) = tokenPos id
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Function " ++ tokenVal id ++ " with return type " ++ show t ++ " where none expected." ]
+        return TypeError
 
 -- | Check that the return instruction isn't used outside a function.
 checkInFun :: AlexPosn -> ParseMonad ()
 checkInFun (AlexPn _ i j) = do
     (_,s,_) <- lift get
-    case (P.filter (\x -> sCategory x == SFunc) s) of
-        [] -> lift $ lift $ tell [(showPos i j) ++ ": Return instruction outside function." ]
+    case P.filter (\x -> sCategory x == SFunc) s of
+        [] -> lift $ lift $ tell [showPos i j ++ ": Return instruction outside function." ]
         _ -> return ()
 
 -- | Check every return instruction in a function.
@@ -580,18 +583,31 @@ checkRetT id ins ts = zipWith3M_ checkTs (repeat id) (P.filter isRet ins) (repea
 
 -- | Check the correct return of a function.
 checkTs :: Token -> Instruction -> [Type] -> ParseMonad ()
-checkTs id (Ret _ (ETup _ es)) ts = if ((P.map returnType es) == ts)
+checkTs id (Ret _ (ETup _ es)) ts = if P.map returnType es == ts
     then return ()
     else do
         let (AlexPn _ i j) = tokenPos id
-        lift $ lift $ tell [(showPos i j) ++ ": Function " ++ (tokenVal id) ++ " expected return type " ++ (show ts) ++ " but got " ++ (show (P.map returnType es))]
-checkTs id (Ret _ e) ts = if ((returnType e) == (head ts))
+        lift $ lift $ tell [showPos i j ++ ": Function " ++ tokenVal id ++ " expected return type " ++ show ts ++ " but got " ++ show (P.map returnType es)]
+checkTs id (Ret _ e) ts = if returnType e == head ts
     then return ()
     else do
         let (AlexPn _ i j) = tokenPos id
-        lift $ lift $ tell [(showPos i j) ++ ": Function " ++ (tokenVal id) ++ " expected return type " ++ (show $ head ts) ++ " but got " ++ (show (returnType e))]
-        
+        lift $ lift $ tell [showPos i j ++ ": Function " ++ tokenVal id ++ " expected return type " ++ show (head ts) ++ " but got " ++ show (returnType e)]
+
 -- | Check if a instruction is a return.
 isRet :: Instruction -> Bool
 isRet (Ret _ _) = True
 isRet _ = False 
+
+-- | While instruction type check.
+checkWhile :: Exp -> Instruction -> AlexPosn -> ParseMonad Type
+checkWhile cond ins (AlexPn _ i j) = case (returnType cond, returnType ins) of
+    (TypeBool, TypeVoid) -> return TypeVoid
+    (TypeError, _) -> return TypeError
+    (_, TypeError) -> return TypeError
+    (t, TypeVoid) -> do
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expected bool in where condition, but got " ++ show t]
+        return TypeError
+    (TypeBool, t) -> do
+        lift $ lift $ tell [showPos i j ++ ": " ++ "Expression of type " ++ show t ++ "when expecting instruction."]
+        return TypeError
