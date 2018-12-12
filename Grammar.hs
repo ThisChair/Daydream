@@ -112,16 +112,30 @@ sdecl t1 t2 = do
     i <- lift getActualScope
     zipWith3M_ redeclaredCheck (map tokenVal t2) (repeat i) (map tokenPos t2)
     t <- getType t1
-    lift $ mapM_ (\x -> insertSymS (tokenVal x) (SymScope i t [] (tokenPos x))) (reverse t2)
+    let sym x = VarScope { scope   = i
+                         , decl    = False
+                         , typeS   = t
+                         , pos     = tokenPos x
+                         , width   = getWidth (fst t)
+                         }
+    --lift $ mapM_ (\x -> insertSymS (tokenVal x) (SymScope i t [] (tokenPos x))) (reverse t2)
+    lift $ mapM_ (\x -> insertSymS (tokenVal x) (sym x)) (reverse t2)
 
 -- | IDeclaration -> Type DAssign
 idecl t1 t2 = do 
     zipWithM_ pervasiveCheck (map idString (fst t2)) (map idPos (fst t2))
     t <- getType t1
     ts <- mapM (\e -> checkDAssign (fst t) e (idPos $ head (fst t2))) (snd t2)
+    let syms x y z = VarScope { scope   = y
+                              , decl    = True
+                              , typeS   = t
+                              , pos     = z
+                              , width   = getWidth (fst t)
+                              }
     mapM_ (\(Variable _ (x,y,z)) ->
         redeclaredCheck x y z >>
-           lift (insertSymS x (SymScope y t [] z))) (fst t2)
+          -- lift (insertSymS x (SymScope y t [] z))) (fst t2)
+          lift (insertSymS x (syms x y z))) (fst t2)
     vs <- zipWithM (\(Variable _ v) tc -> return $ Variable tc v) (fst t2) ts
     return (vs, reverse (snd t2))
 
@@ -142,7 +156,6 @@ dass' t1 t3 = do
 -- | Id -> id
 idname t1 = do
     (s,t) <- searchTable' (tokenVal t1)
-    i <- lift getActualScope
     return (Variable t s)
 
 -- | Id -> Id '[' Exp ']' 
@@ -196,10 +209,10 @@ forfromto t2 ((t,_),v) t5 t7 t8 = do
         return (Block TypeVoid [ass,w])
 
 -- | Det -> ForScope for ForDec from Exp to Exp if Exp In
-forfromtoif t2 ((t,_),v) t5 t7 t8 t9 = do
+forfromtoif t2 ((t,_),v) t5 t7 t9 t10 = do
     t_low <- checkNumUn t5 (tokenPos t2)
     t_high <- checkNumUn t7 (tokenPos t2)
-    t_cond <- checkBoolUn t8 (tokenPos t2)
+    t_cond <- checkBoolUn t9 (tokenPos t2)
     let low_err = t_low == TypeError
         high_err = t_high == TypeError
         cond_err = t_cond == TypeError
@@ -214,8 +227,67 @@ forfromtoif t2 ((t,_),v) t5 t7 t8 t9 = do
             one = EToken TypeInt (TNum noPos "1")
             s = ESum t evar one
             act = Assign TypeVoid ([var],[ValueExp s])
-            bl = Block TypeVoid [t9,act]
+            bl = Block TypeVoid [t10,act]
             w = While TypeVoid ex bl
             fb = Block TypeVoid [ass,w]
         lift popS
-        return (IfThen TypeVoid t8 fb)
+        return (IfThen TypeVoid t9 fb)
+
+-- | Det -> ForScope for ForDec from Exp to Exp with Exp if Exp In
+forfromtowithif t2 ((t,_),v) t5 t7 t9 t11 t12 = do
+    t_low <- checkNumUn t5 (tokenPos t2)
+    t_high <- checkNumUn t7 (tokenPos t2)
+    t_ch <- checkNumUn t9 (tokenPos t2)
+    t_cond <- checkBoolUn t11 (tokenPos t2)
+    let low_err = t_low == TypeError
+        high_err = t_high == TypeError
+        cond_err = t_cond == TypeError
+        ch_err = t_ch == TypeError
+    if low_err || high_err || cond_err || ch_err then
+        return (Block TypeError [])
+    else do
+        i <- lift getActualScope
+        let var = Variable t (tokenVal v,i,tokenPos v)
+            evar = EIdent t var
+            ass = Assign TypeVoid ([var],[ValueExp t5])
+            ex = ELess TypeBool evar t7
+            act = Assign TypeVoid ([var],[ValueExp t9])
+            bl = Block TypeVoid [t12,act]
+            w = While TypeVoid ex bl
+            fb = Block TypeVoid [ass,w]
+        lift popS
+        return (IfThen TypeVoid t11 fb)
+
+-- | Det -> ForScope for ForDec from Exp to Exp with Exp In 
+forfromtowith t2 ((t,_),v) t5 t7 t9 t10 = do
+    t_low <- checkNumUn t5 (tokenPos t2)
+    t_high <- checkNumUn t7 (tokenPos t2)
+    t_ch <- checkNumUn t9 (tokenPos t2)
+    let low_err = t_low == TypeError
+        high_err = t_high == TypeError
+        ch_err = t_ch == TypeError
+    if low_err || high_err || ch_err then 
+        return (Block TypeError [])
+    else do
+        i <- lift getActualScope
+        let var = Variable t (tokenVal v,i,tokenPos v)
+            evar = EIdent t var
+            ass = Assign TypeVoid ([var],[ValueExp t5])
+            ex = ELess TypeBool evar t7
+            act = Assign TypeVoid ([var],[ValueExp t9])
+            bl = Block TypeVoid [t10,act]
+            w = While TypeVoid ex bl
+        lift popS
+        return (Block TypeVoid [ass,w])
+
+---------------------------
+-- Functions
+---------------------------
+
+-- | FuncScope -> Lambda
+enterfun ::ParseMonad ()
+enterfun = lift $ do 
+    i <- getScopeNumber
+    pushS (StackEntry i SFunc Nothing [])
+    addNumber
+

@@ -113,8 +113,8 @@ import Grammar
 -- Inicio
 S : Mod Imports Body           { % start $1 $2 $3 }
 
-Mod : module type              { % return $ Module TypeError $2 }
-    | {- empty -}              { % return $ Main TypeError }
+Mod : module type              { % return $ Module TypeVoid $2 }
+    | {- empty -}              { % return $ Main TypeVoid }
 
 -- Importaciones
 Imports : Imports import type  { % imports $1 $3 }
@@ -124,7 +124,7 @@ Imports : Imports import type  { % imports $1 $3 }
 Body : Body In                 { % return $ $2 : $1 }
      | Body Algebraic          { % return $1 }
      | Body Declaration        { % return $1 }
-     | Body Function           { % return $1 }
+     | Body FunDef             { % return $1 }
      | {- empty -}             { % return [] }
 
 In : SingleI ';'               { % return $1 }
@@ -141,11 +141,11 @@ SingleI : IDeclaration         { % idec $1 }
         | break                { % return $ Break TypeVoid }
         | FunCall              { % ifuncall $1 }
 
-Print : print '(' Exp ')'      { % return $ Print TypeError $3 }
+Print : print '(' Exp ')'      { % return $ Print TypeVoid $3 }
 
-PrintLn : printLn '(' Exp ')'  { % return $ PrintLn TypeError $3 }
+PrintLn : printLn '(' Exp ')'  { % return $ PrintLn TypeVoid $3 }
 
-Read : read '(' ')'            { % return $ Read TypeError }
+Read : read '(' ')'            { % return $ Read TypeUnknown }
 
 -- Bloques
 Block : BlockScope dream Body wake         { % exitbs $3 }
@@ -250,10 +250,10 @@ Exps : Exps ',' Exp            { % return $   ($3 : $1) }
      | Exp                     { % return $   [$1] }
 
 List : '[' Exps ']'            { % checkListType $2 (tokenPos $1) >>=(\t -> return $ EList t (reverse $2)) }
-     | '[' ']'                 { % return $   (EList TypeError []) }
+     | '[' ']'                 { % return $   (EList (TypeList TypeUnknown) []) }
 
 Arr : '{' Exps '}'             { % checkArrType $2 (tokenPos $1) >>= (\t -> return $ EArr t (reverse $2)) }
-    | '{' '}'                  { % return $   (EArr TypeError []) }
+    | '{' '}'                  { % return $   (EArr (TypeArray TypeUnknown "0") []) }
 
 Dict : '[' KV ']'              { % checkDictType $2 (tokenPos $1) >>= (\t -> return $ EDict t (reverse $2)) }
 
@@ -265,6 +265,17 @@ Tup : '(' Exp ',' Exps ')'     { % checkTupType ($2:(reverse $4)) (tokenPos $1) 
 -- Funciones
 FunCall : id '(' Exps ')'      { % checkFunCall (tokenVal $1) $3 (tokenPos $1) >>= (\x -> return $ FCall x $1 $3) }
         | id '(' ')'           { % checkFunCall (tokenVal $1) [] (tokenPos $1) >>= (\x -> return $ FCall x $1 []) }
+
+FunDef : func FName FuncScope '(' ')' Block {}
+       | func FName FuncScope '(' Pars Type id ')' Block {}
+       | func FName FuncScope '(' ')' '-' '>' Type Block {}
+       | func FName FuncScope '(' Pars Type id ')' Block {}
+
+FName : id {}
+
+Pars : Type id ',' {}
+
+FuncScope : {- empty -}                    { % enterfun }
 
 Function : FuncScope func '('ParRet ')' Block { % do { lift popS;
                                                        i <- lift getActualScope; 
@@ -304,10 +315,6 @@ AddFunc : id   { % do { i <- lift getActualScope;
                          } }
 
 
-
-FuncScope : {- empty -}                    { % lift $ do {i <- getScopeNumber; 
-                                                          pushS (StackEntry i SFunc Nothing []);
-                                                          addNumber } }
 
 ParRet : Type Ret id          { % do { i <- lift getActualScope;
                                        l <- return ((\((x,y),(z,n)) -> (($1 : x,reverse ($3 : y) ),(z,n))) $2); 
@@ -363,9 +370,9 @@ Iterator : Indet               { % return $ $1 }
 Indet : while Exp In           { % whiler $1 $2 $3 }
 
 Det : ForScope for ForDec from Exp to Exp In                  { % forfromto $2 $3 $5 $7 $8}
-    | ForScope for ForDec from Exp to Exp if Exp In           { % forfromtoif $2 $3 $5 $7 $8 $9}
-    | ForScope for ForDec from Exp to Exp with Exp if Exp In  { % lift $ popS >> (return $ Det TypeError (FromToWithIf TypeError $5 $7 $9 $11 $12))}
-    | ForScope for ForDec from Exp to Exp with Exp In         { % lift $ popS >> (return $ Det TypeError (FromToWith TypeError $5 $7 $9 $10))}
+    | ForScope for ForDec from Exp to Exp if Exp In           { % forfromtoif $2 $3 $5 $7 $9 $10}
+    | ForScope for ForDec from Exp to Exp with Exp if Exp In  { % forfromtowithif $2 $3 $5 $7 $9 $11 $12}
+    | ForScope for ForDec from Exp to Exp with Exp In         { % forfromtowith $2 $3 $5 $7 $9 $10}
     | ForScope for ForDec in Exp if Exp In                    { % lift $ popS >> (return $ Det TypeError (InIf TypeError $5 $7 $8))}
 
 ForDec : Type id                         {% do {i <- lift getActualScope;

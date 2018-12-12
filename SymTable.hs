@@ -32,10 +32,17 @@ data SymScope
                , otherS   :: [Instruction]  -- ^ List of instructions of a function scope.
                , pos      :: AlexPosn       -- ^ Position of the variable.
                }
-    | VarScope { }
-    | FunScope { varname :: String
-               , typeS   :: (Type,Integer)
-               , fins    :: [Instruction]
+    | VarScope { scope   :: Integer         -- ^ Scope of the variable.
+               , decl    :: Bool            -- ^ True if declared.
+               , typeS   :: (Type,Integer)  -- ^ Type and its scope.
+               , pos     :: AlexPosn        -- ^ Position of the variable.
+               , width   :: Integer         -- ^ Size of the variable.
+               }
+    | FunScope { scope   :: Integer         -- ^ Scope of the function.
+               , typeS   :: (Type,Integer)  -- ^ Type and its scope.
+               , parS    :: [(String,Integer)]
+               , otherS  :: [Instruction]   -- ^ List of instructions of function.
+               , pos     :: AlexPosn        -- ^ Position of the variable.
                } 
     deriving (Show, Eq)
 
@@ -104,6 +111,18 @@ updateIns :: String -> Integer -> [Instruction] -> SymTable -> SymTable
 updateIns id s newins sym = case M.lookup id sym >>= M.lookup s of
     Just (SymScope i (TypeFunc intype outype,_) ins pos) -> 
         insertSym id (SymScope i (TypeFunc intype outype,0) (ins++newins) pos) sym
+
+-- | Updates the instruction for the correct type.
+updateIns' :: String -> Integer -> [Instruction] -> SymTable -> SymTable
+updateIns' id s newins sym = case M.lookup id sym >>= M.lookup s of
+    Just (FunScope i t pars ins pos) -> 
+        insertSym id (FunScope i t pars (ins++newins) pos) sym
+
+-- | Updates paramaters on a function.
+updatePars :: String -> Integer -> [(String,Integer)] -> SymTable -> SymTable
+updatePars id s newpars sym = case M.lookup id sym >>= M.lookup s of
+    Just (FunScope i t pars ins pos) ->
+        insertSym id (FunScope i t (pars++newpars) ins pos) sym
 
 -- | Looks for a SymScope in a SymTable checking the scope in a Stack.
 lookupTable :: String -> SymTable -> Stack -> Maybe SymScope
@@ -208,6 +227,14 @@ insertSymS elem elemScope = modify . modifySymTable $ insertSym elem elemScope
 -- | Insert Instructions into a function symbol.
 insertIns :: String -> Integer -> [Instruction] -> ParseMonad ()
 insertIns id s ins = lift $ modify . modifySymTable $ updateIns id s ins
+
+-- | Insert Instructions into a function symbol.
+insertIns' :: String -> Integer -> [Instruction] -> ParseMonad ()
+insertIns' id s ins = lift $ modify . modifySymTable $ updateIns' id s ins
+
+-- | Insert Params into a function symbol.
+insertPars :: String -> Integer -> [(String,Integer)] -> ParseMonad ()
+insertPars id s pars = lift $ modify . modifySymTable $ updatePars id s pars
 
 -- | Search for symbol in table.
 searchTable :: String -> ParseMonad (String,Integer,AlexPosn)
@@ -535,7 +562,7 @@ checkSingle (Variable t (id,_,AlexPn _ i j)) (ValueExp e) = case (t,returnType e
     (TypeError,_) -> return TypeError
     (_, TypeError) -> return TypeError
     (TypeFloat, TypeInt) -> return TypeVoid  
-    (t,te) -> if t == te 
+    (t,te) -> if t =+ te 
         then return TypeVoid
         else do 
             lift $ lift $ tell [showPos i j ++ ": " ++ "Variable " ++ id ++ " of type " ++ show t ++ " can't be assigned with type " ++ show te]
@@ -548,7 +575,7 @@ checkFunCall id pars (AlexPn _ i j) = do
     (_,t) <- searchTable' id
     case t of 
         TypeError -> return TypeError
-        TypeFunc args ret -> if P.map returnType pars == args
+        TypeFunc args ret -> if and $ zipWith (=+) (P.map returnType pars) args
             then case ret of
                 [] -> return TypeVoid
                 [x] -> return x

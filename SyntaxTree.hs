@@ -236,8 +236,31 @@ data Type = TypeInt                |
             TypeTuple [Type]       |
             TypeFunc [Type] [Type] |
             TypePointer Type       |
-            TypeData String
+            TypeData String        |
+            TypeUnknown
             deriving (Eq)
+
+-- | See if a type can be converted in another.
+(=+) :: Type -> Type -> Bool
+(=+) TypeUnknown t = True
+(=+) t TypeUnknown = True
+(=+) TypeInt TypeFloat = True
+(=+) (TypeArray t1 n1) (TypeArray t2 n2) = (t1 =+ t2) && (n1 == n2)
+(=+) (TypeList t1) (TypeList t2) = t1 =+ t2
+(=+) (TypeDict k1 e1) (TypeDict k2 e2) = (k1 =+ k2) && (e1 =+ e2)
+(=+) t1 t2 = t1 == t2
+
+getWidth :: Type -> Integer
+getWidth TypeInt         = 4
+getWidth TypeFloat       = 4
+getWidth TypeBool        = 1
+getWidth TypeChar        = 4
+getWidth TypeString      = 4
+getWidth TypeVoid        = 0
+getWidth TypeError       = 0
+getWidth TypeType        = 0
+getWidth (TypeArray t n) = getWidth t * read n
+getWidth _               = 4
 
 instance Show Type where
     show TypeInt = "Int"
