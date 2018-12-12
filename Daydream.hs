@@ -16,6 +16,7 @@ import Data.List
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Writer.Lazy
+import Data.Map.Internal.Debug (showTree)
 
 import Lexer
 import Parser
@@ -78,7 +79,7 @@ filePath (x:_) = case reverse x of
 
 -- | Prints a token list.
 printTokList :: [Token] -> IO ()
-printTokList list = mapM_ putStrLn $ map show list
+printTokList = mapM_ print
 
 -- | Depending on options, prints token list and lexical errors.
 lexOption :: [Token] -> [Token] -> [Flag] -> IO [Token]

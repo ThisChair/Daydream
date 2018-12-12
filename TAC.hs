@@ -34,7 +34,7 @@ data TAC = Quadruplet { op :: Operator -- Operator used.
                       , truejumplabel :: String -- Label for the True branch.
                       , falsejumplabel :: String -- Label for the False branch.
                       , result :: Maybe TACField } | -- Result of the operation.
-           Label      { name :: String} deriving (Show) -- Name for the label.
+           Label      { name :: String} deriving (Show, Eq, Ord) -- Name for the label.
 
 -- Data type for representing the many operators available.
 data Operator = OSum     |
@@ -66,7 +66,7 @@ data Operator = OSum     |
                 OPrint   |  
                 OPrintLn |    
                 ONone
-                deriving (Eq)
+                deriving (Eq, Ord)
 
 instance Show Operator where
     show OSum = "+"
@@ -99,17 +99,21 @@ instance Show Operator where
     show OPrintLn = "println"
 
 -- Data type for representing the values available for the 'arg1', 'arg2' and 'result' fields of a TAC.
-data TACField = Temp   {value :: String} | -- Temporal identificator for holding intermediate values.
-                Var    {value :: String} | -- Variable identificator.
-                Tok    {value :: String} | -- Token value.
-                Lab    {value :: String} | -- Label.
-                VarArr {value :: String    -- Variable identificator specifically for arrays.
-                        , index :: TACField}  
+data TACField = Temp      {value :: String} | -- Temporal identificator for holding intermediate values.
+                Var       {value :: String} | -- Variable identificator.
+                TokNum    {value :: String} | -- Numeric Token value.
+                TokStr    {value :: String} | -- String Token value.
+                TokChar   {value :: String} | -- Char Token value.
+                Lab       {value :: String} | -- Label.
+                VarArr    {value :: String    -- Variable identificator specifically for arrays.
+                           , index :: TACField}  deriving (Eq, Ord)
 
 instance Show TACField where
     show (Temp s) = s
     show (Var s) = s
-    show (Tok s) = s
+    show (TokNum s) = s
+    show (TokStr s) = s
+    show (TokChar s) = s
     show (Lab s) = s
     show (VarArr s i) = s ++ "[" ++ show i ++ "]"
 
@@ -168,11 +172,11 @@ convertIfRegistertoString o a1 a2 j1 j2 r = ": " ++ "if " ++ cond_string ++ " go
 -- Conversion of a Quadruplet into a String for later printing.
 convertQuadrupletoString :: Operator -> TACField -> TACField -> TACField -> String
 convertQuadrupletoString o a1 a2 r 
- | o == OAssign = ": " ++ value r ++ " := " ++ value a1
- | (o == ONeg) || (o == ONot) || (o == OBitNot) = ": " ++ value r ++ " = " ++ show o ++ " " ++ value a1
- | o == OJump = ": " ++ show o ++ " " ++ value a1 
- | (o == OPrint) || (o == OPrintLn) = ": " ++ show o ++ " " ++ value a1
- | otherwise = ": " ++ value r ++ " = " ++ value a1 ++ " " ++ show o ++ " " ++ value a2
+ | o == OAssign = ": " ++ show r ++ " := " ++ show a1
+ | (o == ONeg) || (o == ONot) || (o == OBitNot) = ": " ++ show r ++ " = " ++ show o ++ " " ++ show a1
+ | o == OJump = ": " ++ show o ++ " " ++ show a1 
+ | (o == OPrint) || (o == OPrintLn) = ": " ++ show o ++ " " ++ show a1
+ | otherwise = ": " ++ show r ++ " = " ++ value a1 ++ " " ++ show o ++ " " ++ show a2
 
 -- Conversion of a Label into a String for later printing.
 convertLabeltoString :: String -> String
@@ -263,8 +267,8 @@ genRelBinOpTAC symtable rel_bin_op exp1 exp2 = do
         finallabelcode = genLabelCode finallabel -- code for incorpotaring the next instruction's label.
         truelabelcode = genLabelCode t_jump -- code for incorporating the True branch's label.
         falselabelcode = genLabelCode f_jump -- code for incorporating the False branch's label.
-        true_code = createQuadruplet OAssign (Just (Tok "true")) Nothing (Just newTemp) -- True branch's code, newTemp := true.
-        false_code = createQuadruplet OAssign (Just (Tok "false")) Nothing (Just newTemp) -- False branch's code, newTemp := false.
+        true_code = createQuadruplet OAssign (Just (TokNum "1")) Nothing (Just newTemp) -- True branch's code, newTemp := true.
+        false_code = createQuadruplet OAssign (Just (TokNum "0")) Nothing (Just newTemp) -- False branch's code, newTemp := false.
         newTAC = createIfRegister rel_bin_op (getLatestTemp leftTAC) (getLatestTemp rightTAC) t_jump f_jump (Just newTemp)
         resultTAC = createQuadruplet ONone Nothing Nothing (Just newTemp) -- placeholder TAC register for retrieving the result's temporal name later.
         falsejumpcode = genJumpCode (Lab f_jump)
@@ -292,38 +296,41 @@ genFlowRelBinOPTAC symtable rel_bin_op exp1 exp2 = do
         falsejump = genJumpCode (Lab f_jump)
         newTAC = createIfRegister rel_bin_op id1 id2 t_jump f_jump Nothing
         in return (falsejump : newTAC : subTAC)
-
+                                                   
 -- TAC generation for an array's expression list, returns a list of list of TAC.
-toTACArray :: SymTable -> RightValue -> State (Int,Int,String,String,String) [[TAC]]
-toTACArray symtable (ValueExp (EArr _ exp_list)) = mapM (toTAC symtable) exp_list -- AQUI HAY UN BETA CON LOS TIPOS NO BÁSICOS
+{-toTACArray :: SymTable -> RightValue -> State (Int,Int,String,String,String) [[TAC]]
+toTACArray symtable (ValueExp (EArr _ exp_list)) = mapM (toTACArray symtable) exp_list -- AQUI HAY UN BETA CON LOS TIPOS NO BÁSICOS
+-}
 
 -- TAC generation for assignments of type Array.
 genArrayAssignTAC :: SymTable -> [Identifier] -> [RightValue] -> State (Int,Int,String,String,String) [TAC]
 genArrayAssignTAC symtable id_list rv_list = do
-    rvTAC <- mapM (toTACArray symtable) rv_list -- a list of [[TAC]], one [[TAC]] for each array in the assignment list. :: [[[TAC]]]
     idTAC <- mapM (toTAC symtable) id_list -- a list of [TAC], one for each identifier. :: [[TAC]]
-    let idTAClist = concat idTAC
-        idStringlist = [ (fromMaybe (Temp "") . result) x | x <- idTAClist, op x == OIdent ] -- list of identifier names.
-        assignmentTuples = reverse (zip idStringlist rvTAC) -- :: [(id,[[TAC]])]
+    let idTACList = concat idTAC
+        idStringList = [ (fromMaybe (Temp "") . result) x | x <- idTACList, op x == OIdent ] -- list of identifier names.
+        assignmentTuples = reverse (zip id_list rv_list) -- :: [(Identifier,RightValue)]
         in do
-           newTAC <- mapM genArrayTAC assignmentTuples -- a list of TAC, containing the n-assignments 'id[0],..,id[n] := temp_0,..,temp_n' :: [TAC]
+           newTAC <- mapM (genArrayTAC symtable) assignmentTuples -- a list of TAC, containing the n-assignments 'id[0],..,id[n] := temp_0,..,temp_n' :: [TAC]
            let newTAC' = concat [ uncurry (++) x | x <- zip newTAC (reverse idTAC) ] -- for each id, add it's auxiliar TAC code, if it has any. :: [ [TAC] | (TAC,[TAC]) ]
                in return newTAC' 
 
 -- Auxiliar function for TAC generation for assignments of type Array, in charge of generating the actual assignments.
-genArrayTAC :: (TACField,[[TAC]]) -> State (Int,Int,String,String,String) [TAC]
-genArrayTAC (id,array) = let id_decomposition = [ value id ++ "[" ++ show x ++ "]" | x <- [0..length array] ] -- list of indexed identifier accesses, 'id[0]..id[n]'
-                             tempList = L.map getLatestTemp array
-                             assigments = [ createQuadruplet OAssign (fst x) Nothing (Just (Var (snd x))) | x <- zip tempList id_decomposition ] -- list of asignations 'id[0],..,id[n] := temp_0,..,temp_n' :: [TAC]
-                             assigments' = concat $ reverse [ uncurry (:) x | x <- zip assigments array ] -- [ [TAC] | (TAC,[TAC])]
-                             in return assigments'
+genArrayTAC :: SymTable -> (Identifier, RightValue) -> State (Int,Int,String,String,String) [TAC]
+genArrayTAC symtable (id,ValueExp (EArr t exp_list) ) = let n = length exp_list -- length of the array
+                                                            idIndexList = [ Index t id (EToken TypeInt (TNum (AlexPn 0 0 0) (show x))) | x <- [0..n] ] -- list of indexed identifier accesses, 'id[0]..id[n]'
+                                                            rightValueList = [ ValueExp exp | exp <- exp_list ] -- transform the list of expressions into a list of right values.
+                                                            assignmentsList = [ Assign t ([fst x],[snd x]) | x <- zip idIndexList rightValueList ] -- list of assignment nodes 'id[0] := rv_0,..,id[n] := rv_n'
+                                                            in do
+                                                                assignmentsTAC <- mapM (toTAC symtable) assignmentsList -- a list of [TAC], one for each assignment :: [[TAC]] 
+                                                                let newTAC = (concat . reverse) assignmentsTAC
+                                                                    in return newTAC
 
 -- TAC generation for common assignments, ex: id := token, id := id.
 genNormalAssignTAC :: SymTable -> [Identifier] -> [RightValue] -> State (Int,Int,String,String,String) [TAC]
 genNormalAssignTAC symtable id_list rv_list = do
     rvTAC <- mapM (toTAC symtable) rv_list -- right value [TAC] list. :: [[TAC]]
     idTAC <- mapM (toTAC symtable) id_list -- identifiers [TAC] list. :: [[TAC]]
-    let rvTemplist = L.map getLatestTemp rvTAC -- list of lastest used temporal names of each right value, to be assigned to the identifiers. 
+    let rvTemplist = L.map getLatestTemp rvTAC -- list of latest used temporal names of each right value, to be assigned to the identifiers. 
         idTAClist = concat idTAC
         idStringlist = [ result x | x <- idTAClist, op x == OIdent ] -- list of identifier names.
         assignmentTuples = reverse (zip rvTemplist idStringlist) -- assignment tuples [(rv_temp,id)].
@@ -363,8 +370,8 @@ instance TACConvertible Init where
 instance TACConvertible Instruction where
     -- Blocks.
     toTAC symtable (Block _ ins_list) = do
-        insTAC <- mapM (toTAC symtable) ins_list -- TAC list of the block's instructions.
-        return (concat insTAC)
+        insTAC <- mapM (toTAC symtable) (reverse ins_list) -- TAC list of the block's instructions.
+        return ((concat . reverse) insTAC)
 
     -- Assignments.
     toTAC symtable (Assign _ (id_list,rv_list)) = let rv_list_sample = head rv_list -- since lists are homogenic, take a sample to check it's type.
@@ -381,9 +388,9 @@ instance TACConvertible Instruction where
         setTrueCode exp_t_jump
         setFalseCode exp_f_jump
         expTAC <- toTACFlow symtable exp -- conditional expression TAC.
-        insTAC <- toTAC symtable ins -- S1.next := S1.next, instruction TAC.
         nextcode' <- genNewLabel -- next instruction's label.
         setNextCode nextcode'
+        insTAC <- toTAC symtable ins -- S1.next := S.next, instruction TAC.
         let labelcode = genLabelCode exp_t_jump -- code for incorporating the instruction's label. 
             labelcodefinal = genLabelCode nextcode -- Etiqueta de la instruccion siguiente al if
             in return (labelcodefinal : (insTAC ++ (labelcode : expTAC)))
@@ -396,10 +403,10 @@ instance TACConvertible Instruction where
         setTrueCode exp_t_jump
         setFalseCode exp_f_jump
         expTAC <- toTACFlow symtable exp -- conditional expression TAC.
-        ins_list1TAC <- toTAC symtable ins1 -- instruction #1 TAC.
-        ins_list2TAC <- toTAC symtable ins2 -- instruction #2 TAC.
         nextcode' <- genNewLabel -- next instruction's label.
         setNextCode nextcode'
+        ins_list1TAC <- toTAC symtable ins1 -- instruction #1 TAC.
+        ins_list2TAC <- toTAC symtable ins2 -- instruction #2 TAC.
         let labelcode1 = genLabelCode exp_t_jump -- code for incorporating the instruction #1's label.
             labelcode2 = genLabelCode exp_f_jump -- code for incorporating the instruction #2's label.
             jumpcode = genJumpCode (Lab nextcode) -- code for jumping to the next instruction.
@@ -413,13 +420,13 @@ instance TACConvertible Instruction where
         begin <- genNewLabel -- S.begin = newlabel(), cycle header.
         exp_t_jump <- genNewLabel -- E.true := newlabel()
         exp_f_jump <- getNextCode -- E.false := S.next
-        setNextCode begin -- S1.next := S.begin
+        --setNextCode begin -- S1.next := S.begin
         setTrueCode exp_t_jump
         setFalseCode exp_f_jump
         expTAC <- toTACFlow symtable exp -- conditional expression TAC.
-        insTAC <- toTAC symtable ins -- instruction TAC.
         nextcode' <- genNewLabel -- next instruction's label.
         setNextCode nextcode'
+        insTAC <- toTAC symtable ins -- instruction TAC.
         let labelcodeheader = genLabelCode begin -- code for incorporating the header's label.
             labelcode1 = genLabelCode exp_t_jump -- code for incorporating the instruction's label.
             jumpcode = genJumpCode (Lab begin) -- code for jumping back to the header.
@@ -518,18 +525,25 @@ instance TACConvertible Exp where
 
     -- Tokens.
     -- Numeric.
-    toTAC symtable (EToken _ (TNum _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (Tok s))]
+    toTAC symtable (EToken _ (TNum _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (TokNum s))]
     -- Strings.
-    toTAC symtable (EToken _ (TString _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (Tok s))]
+    toTAC symtable (EToken _ (TString _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (TokStr s))]
     -- Characters.
-    toTAC symtable (EToken _ (TChar _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (Tok s))]
+    toTAC symtable (EToken _ (TChar _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (TokChar s))]
     -- Booleans.
-    toTAC symtable (EToken _ (TTrue _)) = return [createQuadruplet ONone Nothing Nothing (Just (Tok "true"))]
-    toTAC symtable (EToken _ (TFalse _)) = return [createQuadruplet ONone Nothing Nothing (Just (Tok "false"))]
+    toTAC symtable (EToken _ (TTrue _)) = return [createQuadruplet ONone Nothing Nothing (Just (TokNum "1"))]
+    toTAC symtable (EToken _ (TFalse _)) = return [createQuadruplet ONone Nothing Nothing (Just (TokNum "0"))]
 
     -- Identifiers as expressions.
-    toTAC symtable (EIdent _ id) = toTAC symtable id
-
+    toTAC symtable (EIdent _ id) = case id of
+                                        (Variable _ _) -> toTAC symtable id
+                                        Index {} -> do 
+                                                    indexTAC <- toTAC symtable id
+                                                    newtemp <- genNewTemp
+                                                    let newTemp = Temp newtemp
+                                                        newTAC = createQuadruplet OAssign (getLatestTemp indexTAC) Nothing (Just newTemp)
+                                                        in return (newTAC : indexTAC)
+    
     -- Arrays.
     -- Check the auxiliary function 'toTACArray'.
 
@@ -567,11 +581,11 @@ instance TACConvertible Exp where
 
     -- Tokens (no change compared to the normal 'toTAC' function).
     -- Numeric.
-    toTACFlow symtable (EToken _ (TNum _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (Tok s))]
+    toTACFlow symtable (EToken _ (TNum _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (TokNum s))]
     -- Strings.
-    toTACFlow symtable (EToken _ (TString _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (Tok s))]
+    toTACFlow symtable (EToken _ (TString _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (TokStr s))]
     -- Characters.
-    toTACFlow symtable (EToken _ (TChar _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (Tok s))]
+    toTACFlow symtable (EToken _ (TChar _ s)) = return [createQuadruplet ONone Nothing Nothing (Just (TokChar s))]
 
     -- Boolean identifiers seen as expressions.
     toTACFlow symtable (EIdent TypeBool id) = do -- E -> id, :: Bool id;
@@ -579,7 +593,7 @@ instance TACConvertible Exp where
         f_jump <- getFalseCode
         idTAC <- toTAC symtable id
         let falsejump = genJumpCode (Lab f_jump)
-            newTAC = createIfRegister OEqual (getLatestTemp idTAC) (Just (Tok "true")) t_jump f_jump Nothing -- 'if ID then', is translated into 'if ID == true then'
+            newTAC = createIfRegister OEqual (getLatestTemp idTAC) (Just (TokNum "1")) t_jump f_jump Nothing -- 'if ID then', is translated into 'if ID == true then'
             in return (falsejump : newTAC : idTAC)
 
     -- Non-boolean identifiers seen as expressions. -- E -> id
@@ -685,24 +699,35 @@ instance TACConvertible Exp where
 -- Identifiers.
 instance TACConvertible Identifier where
     -- Identifier names.
-    toTAC symtable (Variable _ (name,scope,_)) -- 'name' contains, quite obviously, the identifier name , 'scope' the associated scope.
-     | offset == 2 = return [createQuadruplet OIdent Nothing Nothing (Just (Var name))]
-     | otherwise = return [createQuadruplet OIdent Nothing Nothing (Just (Var (name ++ "[" ++ show offset ++ "]")))]
-     where offset = lookupTierTable symtable name scope
+    toTAC symtable (Variable _ (name,scope,_)) = return [createQuadruplet OIdent Nothing Nothing (Just (Var (name++show scope)))]-- 'name' contains, quite obviously, the identifier name , 'scope' the associated scope.
+    -- |offset == 2 = return [createQuadruplet OIdent Nothing Nothing (Just (Var name))] -- if the identifier exists in the global scope, it doesn't need an offset.
+    -- |otherwise = return [createQuadruplet OIdent Nothing Nothing (Just (Var (name ++ "[" ++ show offset ++ "]")))] -- otherwise, we need the offset.
+     --where offset = lookupTierTable symtable name scope
                 
     -- Array accesses. (Indexation)
     toTAC symtable (Index t id exp)  = do
-        idTAC <- toTAC symtable id 
-        expTAC <- toTAC symtable exp 
+        idTAC <- toTAC symtable id -- a list of TAC for the identifier :: [TAC]
+        expTAC <- toTAC symtable exp -- a list of TAC for the index expression :: [TAC] 
         newlabel1 <- genNewTemp
         newlabel2 <- genNewTemp
         let width = "width" -- falta una forma de obtener la width aaaaaa.
             newTemp1 = Temp newlabel1
             newTemp2 = Temp newlabel2
-            subTAC = createQuadruplet OAssign (getLatestTemp expTAC) Nothing (Just newTemp1)                -- temp1 := index_exp 
-            offsetTAC = createQuadruplet OMul (Just newTemp1) (Just (Tok width)) (Just newTemp2)            -- temp2 := temp1 * width
-            newTAC = createQuadruplet OIdent Nothing Nothing (Just (VarArr (idString id) (Temp newlabel2))) -- id[temp2]
-            in return (newTAC : offsetTAC : subTAC : expTAC)
+            in case id of 
+                Variable t (name,_,_) -> let indexTAC = createQuadruplet OAssign (getLatestTemp expTAC) Nothing (Just newTemp1)              -- temp1 := index_exp
+                                             offsetTAC = createQuadruplet OMul (Just newTemp1) (Just (TokNum width)) (Just newTemp2)            -- temp2 := temp1 * width
+                                             newTAC = createQuadruplet OIdent Nothing Nothing (Just (VarArr (idString id) (Temp newlabel2))) -- id[temp2]
+                                             in return (newTAC : offsetTAC : indexTAC : expTAC)
+                Index t subId _ -> do 
+                                   newlabel3 <- genNewTemp
+                                   let subWidth = "subWidth" -- UwU
+                                       subTAC =  tail idTAC
+                                       indexTAC = createQuadruplet OAssign (getLatestTemp expTAC) Nothing (Just newTemp1)              -- temp1 := index_exp 
+                                       offsetTAC = createQuadruplet OMul (Just newTemp1) (Just (TokNum width)) (Just newTemp2)            -- temp2 := temp1 * width
+                                       newTemp3 = Temp newlabel3 
+                                       greaterOffsetTAC = createQuadruplet OSum (getLatestTemp subTAC) (Just newTemp2) (Just newTemp3) -- temp3 :=  + temp2
+                                       newTAC = createQuadruplet OIdent Nothing Nothing (Just (VarArr (idString id) (Temp newlabel3))) -- id[temp3]
+                                       in return (newTAC : greaterOffsetTAC : offsetTAC : indexTAC : (expTAC ++ subTAC))
 
 -- Right Values.
 instance TACConvertible RightValue where
