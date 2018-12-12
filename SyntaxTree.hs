@@ -148,6 +148,11 @@ idPos (Variable _ (_,_,p)) = p
 idPos (Index _ id _) = idPos id
 idPos (MemberCall _ id _) = idPos id
 
+idScope :: Identifier -> Integer
+idScope (Variable _ (_,i,_)) = i
+idScope (Index _ id _) = idScope id
+idScope (MemberCall _ id _) = idScope id
+
 data Exp
     -- | Sum between two expressions.
     = ESum Type Exp Exp

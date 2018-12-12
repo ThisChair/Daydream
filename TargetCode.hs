@@ -26,8 +26,10 @@ type FlowGraph = Map Int BasicBlock
 
 -- Data type represeting the MIPS instruction set.
 data MIPSTargetCode 
+    -- Declarations
+    = Decl String Integer
     -- Arithmetic
-    = Add Register Register Register   -- Addition
+    | Add Register Register Register   -- Addition
     | Sub Register Register Register   -- Substraction
     | Addi Register Register Constant  -- Addition with inmediate, 'inmediate' means a constant number. 
     | Addu Register Register Register  -- Addition, but values are treated as unsigned integers, not two's complement integers.
@@ -73,6 +75,9 @@ data MIPSTargetCode
     | PrintStr                         -- Print null-terminated character string, $a0 = address of string in memory. $v0 = 4.
     | PrintChr                         -- Print character, $a0 = character to be printed. $v0 = 11.
 
+instance Show MIPSTargetCode where
+    show (Decl s v) = s ++ ":" ++ " .space " ++ show v
+
 -- Data type representing a register, which is just an alias for a String.
 newtype Register = Reg {value :: String} deriving (Show, Eq,Ord)
 
@@ -91,30 +96,64 @@ type DescriptorTable = Map Descriptor (Set Descriptor)
 data Descriptor = Regi Register | TField TACField deriving (Show, Eq, Ord)
 
 -- Generates target code
-genTargetCode :: [TAC] -> DescriptorTable
-genTargetCode tacList = let varsList = L.map TField (S.toList (L.foldr getVariables S.empty tacList))
-                            --enumTAC = enumerateTAC tacList -- Enumerated TAC list.
-                            --rangeTable = L.foldl buildRangeTable M.empty enumTAC -- Range Table for usage ranges of variables.
-                            --varsList = M.keys rangeTable -- List of variables.
-                            --varEnumerationMap = M.fromList (zip varsList [0..length varsList]) -- Map of variables names to their corresponding interger enumeration.
-                            --edgeList = buildInterferenceEdges rangeTable -- Edge list for graph construction.
-                            --(graph, nodeFromVertex, vertexFromKey) = G.graphFromEdges edgeList
-                            --graphColoring = bruteSearchGraphColoring graph 16 -- MIPS in particular has 16 non-reserved assignable registers (?).
-                            registersList = L.map Reg ["$s0","$s1","$s2","$s3","$s4","$s5","$s6","$s7","$t0","$t1","$t2","$t3","$t4","$t5","$t6","$t7","$t8","$t9"]
-                            registersListasDescriptors = L.map Regi registersList
-                            partitionedTAC = partitionTACList' tacList 
-                            finalPartitionedTAC = finalPartitioning partitionedTAC
-                            basicBlocks = genBasicBlocks finalPartitionedTAC -- List of basic blocks
-                            flowGraph = buildFlowGraph basicBlocks
-                            flowGraphUpdated = liveVariables flowGraph ([S.empty],[S.empty])
-                            descriptorTableKeys = registersListasDescriptors ++ varsList
-                            descriptorTable = M.fromList (zip descriptorTableKeys [ S.empty | x <- [0..length descriptorTableKeys] ]) -- :: DescriptorTable
-                            {-in case graphColoring of
-                                Just g -> let registersAssignmentMap = createRegisterAssignmentMap varEnumerationMap g registersMap
+genTargetCode :: Map String Integer -> [TAC] -> ([MIPSTargetCode],[MIPSTargetCode])
+genTargetCode declarations tacList = let dataDeclarations = L.map makeDeclaration (M.toList declarations) 
+                                         optimizedTAC = L.map constantFolding tacList
+                                         varsList = L.map TField (S.toList (L.foldr getVariables S.empty optimizedTAC))
+                                         --enumTAC = enumerateTAC tacList -- Enumerated TAC list.
+                                         --rangeTable = L.foldl buildRangeTable M.empty enumTAC -- Range Table for usage ranges of variables.
+                                         --varsList = M.keys rangeTable -- List of variables.
+                                         --varEnumerationMap = M.fromList (zip varsList [0..length varsList]) -- Map of variables names to their corresponding interger enumeration.
+                                         --edgeList = buildInterferenceEdges rangeTable -- Edge list for graph construction.
+                                         --(graph, nodeFromVertex, vertexFromKey) = G.graphFromEdges edgeList
+                                         --graphColoring = bruteSearchGraphColoring graph 16 -- MIPS in particular has 16 non-reserved assignable registers (?).
+                                         registersList = L.map Reg ["$s0","$s1","$s2","$s3","$s4","$s5","$s6","$s7","$t0","$t1","$t2","$t3","$t4","$t5","$t6","$t7","$t8","$t9"]
+                                         registersListasDescriptors = L.map Regi registersList
+                                         partitionedTAC = partitionTACList' optimizedTAC 
+                                         finalPartitionedTAC = finalPartitioning partitionedTAC
+                                         basicBlocks = genBasicBlocks finalPartitionedTAC -- List of basic blocks
+                                         flowGraph = buildFlowGraph basicBlocks
+                                         flowGraphUpdated = liveVariables flowGraph ([S.empty],[S.empty])
+                                         descriptorTableKeys = registersListasDescriptors ++ varsList
+                                         descriptorTable = M.fromList (zip descriptorTableKeys [ S.empty | x <- [0..length descriptorTableKeys] ]) -- :: DescriptorTable
+                                         {-in case graphColoring of
+                                           Just g -> let registersAssignmentMap = createRegisterAssignmentMap varEnumerationMap g registersMap
                                               in registersAssignmentMap
-                                Nothing -> let registersAssignmentMap = M.empty
+                                          Nothing -> let registersAssignmentMap = M.empty
                                               in registersAssignmentMap-}
-                            in descriptorTable
+                                         in (dataDeclarations,[])
+
+makeDeclaration :: (String,Integer) -> MIPSTargetCode
+makeDeclaration (var,width) = Decl var width          
+
+-- ################################################################################ --
+--------------------------------------------------------------------------------------
+-------------------- FUNCTIONS FOR DEALING WITH MIPS TARGET CODE  --------------------
+--------------------------------------------------------------------------------------
+-- ################################################################################ --
+
+printMIPSCode :: ([MIPSTargetCode],[MIPSTargetCode]) -> IO ()
+printMIPSCode (dataDeclarations,textInstructions) = let header = ".data\n"
+                                                        l1 = (unlines . L.map show) dataDeclarations
+                                                        in putStrLn (header ++ l1 ++ ".text\n")
+
+-- ################################################################################ --
+--------------------------------------------------------------------------------------
+--------------------------- FUNCTIONS FOR OPTIMIZING TAC  ----------------------------
+--------------------------------------------------------------------------------------
+-- ################################################################################ --
+
+constantFolding :: TAC -> TAC
+constantFolding (Quadruplet OSum (Just (TokNum v1)) (Just (TokNum v2)) r) = createQuadruplet OAssign (Just (TokNum (show (read v1 + read v2 :: Int)))) Nothing r
+constantFolding (Quadruplet ODif (Just (TokNum v1)) (Just (TokNum v2)) r) = let dif = read v1 - read v2 :: Int
+                                                                                in if dif < 0 
+                                                                                    then createQuadruplet ONeg (Just (TokNum (show (abs dif)))) Nothing r
+                                                                                    else createQuadruplet OAssign (Just (TokNum (show dif))) Nothing r
+constantFolding (Quadruplet OMul (Just (TokNum v1)) (Just (TokNum v2)) r) = createQuadruplet OAssign (Just (TokNum (show (read v1 * read v2 :: Int)))) Nothing r
+constantFolding (Quadruplet OMod (Just (TokNum v1)) (Just (TokNum v2)) r) = createQuadruplet OAssign (Just (TokNum (show (read v1 `mod` read v2 :: Int)))) Nothing r
+constantFolding (Quadruplet ODivE (Just (TokNum v1)) (Just (TokNum v2)) r) = createQuadruplet OAssign (Just (TokNum (show (read v1 `div` read v2 :: Int)))) Nothing r
+constantFolding (Quadruplet OPot (Just (TokNum v1)) (Just (TokNum v2)) r) = createQuadruplet OAssign (Just (TokNum (show (read v1 ^ read v2 :: Int)))) Nothing r
+constantFolding tac = tac 
 
 -- ################################################################################ --
 --------------------------------------------------------------------------------------
@@ -393,8 +432,8 @@ createRegisterAssignmentMap varEnumerationMap graphColoring registersMap = let v
 ------- FUNCTIONS FOR DESCRIPTOR TABLE MANAGEMENT AND TARGET CODE GENERATION ---------
 --------------------------------------------------------------------------------------
 -- ################################################################################ --
-
-{-toTargetCode :: FlowGraph -> DescriptorTable -> [Register] -> [MIPSTargetCode]
+{-
+toTargetCode :: FlowGraph -> DescriptorTable -> [Register] -> [MIPSTargetCode]
 toTargetCode flowGraph descriptorTable registerList = let basicBlocksList = M.toList flowGraph
                                                           in L.foldl toTC (registerList,descriptorTable,[]) basicBlocksList
                                                           

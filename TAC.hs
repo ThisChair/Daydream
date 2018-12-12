@@ -18,10 +18,10 @@ import Data.Maybe (fromMaybe)
 
 class TACConvertible a where
     -- Main TAC generator function.
-    toTAC :: SymTable -> a -> State (Int,Int,String,String,String) [TAC] -- State Monad (temporals counter, labels counter, S.next, E.true, E.false).
+    toTAC :: SymTable -> a -> State (Int,Int,String,String,String,Map String Integer) [TAC] -- State Monad (temporals counter, labels counter, S.next, E.true, E.false, width table).
 
     -- Generates special TAC specifically for Flow-Control structures.
-    toTACFlow :: SymTable -> a -> State (Int,Int,String,String,String) [TAC]
+    toTACFlow :: SymTable -> a -> State (Int,Int,String,String,String,Map String Integer) [TAC]
 
 -- Data type for register-like TAC representation.
 data TAC = Quadruplet { op :: Operator -- Operator used.
@@ -124,39 +124,42 @@ instance Show TACField where
 -- ################################################################################ --
 
 -- Returns a new temporal name, increases the temporal name counter by one.
-genNewTemp :: State (Int,Int,String,String,String) String
-genNewTemp = state $ \(temp_counter,label_counter,next_code,true_code,false_code) -> ('t' : show (temp_counter+1),(temp_counter+1,label_counter,next_code,true_code,false_code))
+genNewTemp :: State (Int,Int,String,String,String,Map String Integer) String
+genNewTemp = state $ \(temp_counter,label_counter,next_code,true_code,false_code,width_map) -> ('t' : show (temp_counter+1),(temp_counter+1,label_counter,next_code,true_code,false_code,width_map))
 
 -- Returns a new label name, increases the label name counter by one.
-genNewLabel :: State (Int,Int,String,String,String) String
-genNewLabel = state $ \(temp_counter,label_counter,next_code,true_code,false_code) -> ("L" ++ show (label_counter+1),(temp_counter,label_counter+1,next_code,true_code,false_code))
+genNewLabel :: State (Int,Int,String,String,String,Map String Integer) String
+genNewLabel = state $ \(temp_counter,label_counter,next_code,true_code,false_code,width_map) -> ("L" ++ show (label_counter+1),(temp_counter,label_counter+1,next_code,true_code,false_code,width_map))
 
 -- Returns the current label associated with S.next.
-getNextCode :: State (Int,Int,String,String,String) String
+getNextCode :: State (Int,Int,String,String,String,Map String Integer) String
 getNextCode = getNextCodeFromStateTuple <$> get
-    where getNextCodeFromStateTuple (_,_,l,_,_) = l
+    where getNextCodeFromStateTuple (_,_,l,_,_,_) = l
 
 -- Returns the current label associated with E.true.
-getTrueCode :: State (Int,Int,String,String,String) String
+getTrueCode :: State (Int,Int,String,String,String,Map String Integer) String
 getTrueCode = getTrueCodeFromStateTuple <$> get
-    where getTrueCodeFromStateTuple (_,_,_,t,_) = t
+    where getTrueCodeFromStateTuple (_,_,_,t,_,_) = t
 
 -- Returns the current label associated with E.false.
-getFalseCode :: State (Int,Int,String,String,String) String
+getFalseCode :: State (Int,Int,String,String,String,Map String Integer) String
 getFalseCode = getFalseCodeFromStateTuple <$> get
-    where getFalseCodeFromStateTuple (_,_,_,_,f) = f
+    where getFalseCodeFromStateTuple (_,_,_,_,f,_) = f
 
 -- Sets S.next to a given value.
-setNextCode :: String -> State (Int,Int,String,String,String) ()
-setNextCode string = state $ \(c1,c2,nc,tc,fc) -> ((),(c1,c2,string,tc,fc))
+setNextCode :: String -> State (Int,Int,String,String,String,Map String Integer) ()
+setNextCode string = state $ \(c1,c2,nc,tc,fc,wm) -> ((),(c1,c2,string,tc,fc,wm))
 
 -- Sets E.true to a given value.
-setTrueCode :: String -> State (Int,Int,String,String,String) ()
-setTrueCode string = state $ \(c1,c2,nc,tc,fc) -> ((),(c1,c2,nc,string,fc))
+setTrueCode :: String -> State (Int,Int,String,String,String,Map String Integer) ()
+setTrueCode string = state $ \(c1,c2,nc,tc,fc,wm) -> ((),(c1,c2,nc,string,fc,wm))
 
 -- Sets E.false to a given value.
-setFalseCode :: String -> State (Int,Int,String,String,String) ()
-setFalseCode string = state $ \(c1,c2,nc,tc,fc) -> ((),(c1,c2,nc,tc,string))
+setFalseCode :: String -> State (Int,Int,String,String,String,Map String Integer) ()
+setFalseCode string = state $ \(c1,c2,nc,tc,fc,wm) -> ((),(c1,c2,nc,tc,string,wm))
+
+insertInWidthMap :: String -> Integer -> State (Int,Int,String,String,String,Map String Integer) ()
+insertInWidthMap var width = state $ \(c1,c2,nc,tc,fc,wm) -> ((),(c1,c2,nc,tc,fc,M.insert var width wm))
 
 -- ################################################################################ --
 --------------------------------------------------------------------------------------
@@ -235,31 +238,33 @@ genLabelCode string = Label {name=string}
 genJumpCode :: TACField -> TAC
 genJumpCode label = Quadruplet {op=OJump, arg1=Just label, arg2=Nothing, result=Nothing}
 
--- Looks up in the hierarchic symbol table, and returns the offset asociated with a given name.
-lookupTierTable :: SymTable -> String -> Integer -> Integer
-lookupTierTable symtable varname varscope = case M.lookup varname symtable of -- Name look up.
-                                                 Just var_scope_list -> case M.lookup varscope var_scope_list of -- Scope look up.
-                                                                             Just offset -> scope offset
+-- Looks up in the hierarchic symbol table, and returns the width asociated with a given name.
+lookupWidth :: SymTable -> String -> Integer -> Integer
+lookupWidth symtable varname varscope = case M.lookup varname symtable of -- Name look up.
+                                         Just var_scope_list -> case M.lookup varscope var_scope_list of -- Scope look up.
+                                                                 Just scope -> width scope 
 
 -- TAC template for binary operators
-genBinOpTAC :: (TACConvertible a) => SymTable -> Operator -> a -> a -> State (Int,Int,String,String,String) [TAC]
+genBinOpTAC :: (TACConvertible a) => SymTable -> Operator -> a -> a -> State (Int,Int,String,String,String,Map String Integer) [TAC]
 genBinOpTAC symtable bin_op exp1 exp2 = do
     leftTAC <- toTAC symtable exp1 -- left-side expression TAC.
     rightTAC <- toTAC symtable exp2 -- right-side expression TAC.
     newlabel <- genNewTemp -- new temporal name for holding the value.
+    insertInWidthMap newlabel 4
     let subTAC = rightTAC ++ leftTAC 
         newTemp = Temp newlabel
         newTAC = createQuadruplet bin_op (getLatestTemp leftTAC) (getLatestTemp rightTAC) (Just newTemp)
         in return (newTAC : subTAC)      
 
 -- TAC template for relational binary operators
-genRelBinOpTAC :: (TACConvertible a) => SymTable -> Operator -> a -> a -> State (Int,Int,String,String,String) [TAC]
+genRelBinOpTAC :: (TACConvertible a) => SymTable -> Operator -> a -> a -> State (Int,Int,String,String,String,Map String Integer) [TAC]
 genRelBinOpTAC symtable rel_bin_op exp1 exp2 = do
     t_jump <- genNewLabel  -- Label for the True branch.
     f_jump <- genNewLabel  -- Label for the False branch.
     leftTAC <- toTAC symtable exp1 -- left-side expression TAC.
     rightTAC <- toTAC symtable exp2 -- right-side expression TAC.
     newlabel <- genNewTemp -- new temporal name for holding the value.
+    insertInWidthMap newlabel 4
     finallabel <- genNewLabel -- next instruction's label.
     let subTAC = rightTAC ++ leftTAC
         newTemp = Temp newlabel
@@ -275,16 +280,17 @@ genRelBinOpTAC symtable rel_bin_op exp1 exp2 = do
         in return (resultTAC : finallabelcode : jumpcode : false_code : falselabelcode : jumpcode : true_code : truelabelcode : falsejumpcode : newTAC : subTAC)
 
 -- TAC template for unary operators.
-genUnOpTAC :: (TACConvertible a) => SymTable -> Operator -> a -> State (Int,Int,String,String,String) [TAC]
+genUnOpTAC :: (TACConvertible a) => SymTable -> Operator -> a -> State (Int,Int,String,String,String,Map String Integer) [TAC]
 genUnOpTAC symtable un_op exp = do
     expTAC <- toTAC symtable exp -- expression TAC.
     newlabel <- genNewTemp -- new temporal name for holding the value.
+    insertInWidthMap newlabel 4
     let newTemp = Temp newlabel
         newTAC = createQuadruplet un_op (getLatestTemp expTAC) Nothing (Just newTemp)
         in return (newTAC : expTAC)
 
 -- Flow-Control TAC template for relational binary operators.
-genFlowRelBinOPTAC :: (TACConvertible a) => SymTable -> Operator -> a -> a -> State (Int,Int,String,String,String) [TAC]
+genFlowRelBinOPTAC :: (TACConvertible a) => SymTable -> Operator -> a -> a -> State (Int,Int,String,String,String,Map String Integer) [TAC]
 genFlowRelBinOPTAC symtable rel_bin_op exp1 exp2 = do
     t_jump <- getTrueCode -- Label for the True branch.
     f_jump <- getFalseCode -- Label for the False branch.
@@ -303,7 +309,7 @@ toTACArray symtable (ValueExp (EArr _ exp_list)) = mapM (toTACArray symtable) ex
 -}
 
 -- TAC generation for assignments of type Array.
-genArrayAssignTAC :: SymTable -> [Identifier] -> [RightValue] -> State (Int,Int,String,String,String) [TAC]
+genArrayAssignTAC :: SymTable -> [Identifier] -> [RightValue] -> State (Int,Int,String,String,String,Map String Integer) [TAC]
 genArrayAssignTAC symtable id_list rv_list = do
     idTAC <- mapM (toTAC symtable) id_list -- a list of [TAC], one for each identifier. :: [[TAC]]
     let idTACList = concat idTAC
@@ -315,7 +321,7 @@ genArrayAssignTAC symtable id_list rv_list = do
                in return newTAC' 
 
 -- Auxiliar function for TAC generation for assignments of type Array, in charge of generating the actual assignments.
-genArrayTAC :: SymTable -> (Identifier, RightValue) -> State (Int,Int,String,String,String) [TAC]
+genArrayTAC :: SymTable -> (Identifier, RightValue) -> State (Int,Int,String,String,String,Map String Integer) [TAC]
 genArrayTAC symtable (id,ValueExp (EArr t exp_list) ) = let n = length exp_list -- length of the array
                                                             idIndexList = [ Index t id (EToken TypeInt (TNum (AlexPn 0 0 0) (show x))) | x <- [0..n] ] -- list of indexed identifier accesses, 'id[0]..id[n]'
                                                             rightValueList = [ ValueExp exp | exp <- exp_list ] -- transform the list of expressions into a list of right values.
@@ -326,7 +332,7 @@ genArrayTAC symtable (id,ValueExp (EArr t exp_list) ) = let n = length exp_list 
                                                                     in return newTAC
 
 -- TAC generation for common assignments, ex: id := token, id := id.
-genNormalAssignTAC :: SymTable -> [Identifier] -> [RightValue] -> State (Int,Int,String,String,String) [TAC]
+genNormalAssignTAC :: SymTable -> [Identifier] -> [RightValue] -> State (Int,Int,String,String,String,Map String Integer) [TAC]
 genNormalAssignTAC symtable id_list rv_list = do
     rvTAC <- mapM (toTAC symtable) rv_list -- right value [TAC] list. :: [[TAC]]
     idTAC <- mapM (toTAC symtable) id_list -- identifiers [TAC] list. :: [[TAC]]
@@ -340,13 +346,13 @@ genNormalAssignTAC symtable id_list rv_list = do
         in return finalTAC
 
 -- TAC generation for all of the function's code.
-genFuncTAC :: (TACConvertible a) => SymTable -> [(String,a)] -> State (Int,Int,String,String,String) [TAC]
+genFuncTAC :: (TACConvertible a) => SymTable -> [(String,a)] -> State (Int,Int,String,String,String,Map String Integer) [TAC]
 genFuncTAC symtable func_tuples = do
     funcTAC <- mapM (funcTupleToTAC symtable) func_tuples -- [[TAC]]
     return (concat funcTAC)
 
 -- TAC generation for an individual function's code.
-funcTupleToTAC :: (TACConvertible a) => SymTable -> (String,a) -> State (Int,Int,String,String,String) [TAC]
+funcTupleToTAC :: (TACConvertible a) => SymTable -> (String,a) -> State (Int,Int,String,String,String,Map String Integer) [TAC]
 funcTupleToTAC symtable (func_name,func_code) = do
     func_codesTAC <- toTAC symtable func_code -- [TAC] list of the function's code.
     let nameTAC = genLabelCode func_name -- code for incorporating the function's label.
@@ -540,6 +546,7 @@ instance TACConvertible Exp where
                                         Index {} -> do 
                                                     indexTAC <- toTAC symtable id
                                                     newtemp <- genNewTemp
+                                                    insertInWidthMap newtemp 4
                                                     let newTemp = Temp newtemp
                                                         newTAC = createQuadruplet OAssign (getLatestTemp indexTAC) Nothing (Just newTemp)
                                                         in return (newTAC : indexTAC)
@@ -699,35 +706,45 @@ instance TACConvertible Exp where
 -- Identifiers.
 instance TACConvertible Identifier where
     -- Identifier names.
-    toTAC symtable (Variable _ (name,scope,_)) = return [createQuadruplet OIdent Nothing Nothing (Just (Var (name++show scope)))]-- 'name' contains, quite obviously, the identifier name , 'scope' the associated scope.
+    toTAC symtable (Variable _ (name,scope,_)) = let width = lookupWidth symtable name scope
+                                                     in do
+                                                        insertInWidthMap name width
+                                                        return [createQuadruplet OIdent Nothing Nothing (Just (Var (name++show scope)))]-- 'name' contains, quite obviously, the identifier name , 'scope' the associated scope.
     -- |offset == 2 = return [createQuadruplet OIdent Nothing Nothing (Just (Var name))] -- if the identifier exists in the global scope, it doesn't need an offset.
     -- |otherwise = return [createQuadruplet OIdent Nothing Nothing (Just (Var (name ++ "[" ++ show offset ++ "]")))] -- otherwise, we need the offset.
-     --where offset = lookupTierTable symtable name scope
                 
     -- Array accesses. (Indexation)
-    toTAC symtable (Index t id exp)  = do
+    toTAC symtable (Index (TypeArray t _) id exp)  = do
         idTAC <- toTAC symtable id -- a list of TAC for the identifier :: [TAC]
         expTAC <- toTAC symtable exp -- a list of TAC for the index expression :: [TAC] 
         newlabel1 <- genNewTemp
+        insertInWidthMap newlabel1 4
         newlabel2 <- genNewTemp
-        let width = "width" -- falta una forma de obtener la width aaaaaa.
+        insertInWidthMap newlabel2 4
+        let width = lookupWidth symtable (idString id) (idScope id) -- total width of the array.
+            offsetWidth = getWidth t
             newTemp1 = Temp newlabel1
             newTemp2 = Temp newlabel2
             in case id of 
                 Variable t (name,_,_) -> let indexTAC = createQuadruplet OAssign (getLatestTemp expTAC) Nothing (Just newTemp1)              -- temp1 := index_exp
-                                             offsetTAC = createQuadruplet OMul (Just newTemp1) (Just (TokNum width)) (Just newTemp2)            -- temp2 := temp1 * width
+                                             offsetTAC = createQuadruplet OMul (Just newTemp1) (Just (TokNum (show offsetWidth))) (Just newTemp2)  -- temp2 := temp1 * width
                                              newTAC = createQuadruplet OIdent Nothing Nothing (Just (VarArr (idString id) (Temp newlabel2))) -- id[temp2]
-                                             in return (newTAC : offsetTAC : indexTAC : expTAC)
+                                             in do 
+                                                insertInWidthMap (idString id) width
+                                                return (newTAC : offsetTAC : indexTAC : expTAC)
                 Index t subId _ -> do 
                                    newlabel3 <- genNewTemp
+                                   insertInWidthMap newlabel3 4
                                    let subWidth = "subWidth" -- UwU
                                        subTAC =  tail idTAC
                                        indexTAC = createQuadruplet OAssign (getLatestTemp expTAC) Nothing (Just newTemp1)              -- temp1 := index_exp 
-                                       offsetTAC = createQuadruplet OMul (Just newTemp1) (Just (TokNum width)) (Just newTemp2)            -- temp2 := temp1 * width
+                                       offsetTAC = createQuadruplet OMul (Just newTemp1) (Just (TokNum (show offsetWidth))) (Just newTemp2)  -- temp2 := temp1 * width
                                        newTemp3 = Temp newlabel3 
                                        greaterOffsetTAC = createQuadruplet OSum (getLatestTemp subTAC) (Just newTemp2) (Just newTemp3) -- temp3 :=  + temp2
                                        newTAC = createQuadruplet OIdent Nothing Nothing (Just (VarArr (idString id) (Temp newlabel3))) -- id[temp3]
-                                       in return (newTAC : greaterOffsetTAC : offsetTAC : indexTAC : (expTAC ++ subTAC))
+                                       in do 
+                                          insertInWidthMap (idString id) width
+                                          return (newTAC : greaterOffsetTAC : offsetTAC : indexTAC : (expTAC ++ subTAC))
 
 -- Right Values.
 instance TACConvertible RightValue where

@@ -17,7 +17,7 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Writer.Lazy
 import Control.Monad(when)
-import Data.Map.Internal.Debug (showTree)
+import Data.Map.Strict (empty,Map)
 
 import Lexer
 import Parser
@@ -119,18 +119,18 @@ printSym :: SymTable -> [Flag] -> IO ()
 printSym s opts = when (Table `elem` opts) $ print s
 
 -- | Generates TAC for the syntax tree.
-generateTAC :: (TACConvertible a) => a -> SymTable -> [Flag] -> [TAC]
-generateTAC tree symtable opts = evalState (toTAC symtable tree) (0,-1,"","","")
+generateTAC :: (TACConvertible a) => a -> SymTable -> [Flag] -> ([TAC],(Int,Int,String,String,String,Map String Integer))
+generateTAC tree symtable opts = runState (toTAC symtable tree) (0,-1,"","","",empty)
 
 printTAC' :: [TAC] -> [Flag] -> IO ()
 printTAC' tac_list opts = when (Intermediate `elem` opts) $ printTAC tac_list
 
 
 -- | Generates Target code for the Three Adress Code.
-generateTargetCode :: [TAC] -> [Flag] -> IO ()
-generateTargetCode tac_list opts = when (Target `elem` opts) ptc
+generateTargetCode :: Map String Integer -> [TAC] -> [Flag] -> IO ()
+generateTargetCode wm tac_list opts = when (Target `elem` opts) ptc
   where
-    ptc = (print . genTargetCode . filterTACList . reverse) tac_list
+    ptc = (printMIPSCode . genTargetCode wm . filterTACList . reverse) tac_list
 
 
 main :: IO ()
@@ -146,7 +146,7 @@ main = do
     syntaxErrors w
     t <- reportRes p opts
     printSym s opts
-    let tac_list = generateTAC t s opts
+    let (tac_list,(_,_,_,_,_,wm)) = generateTAC t s opts
         in do 
             printTAC' tac_list opts
-            generateTargetCode tac_list opts
+            generateTargetCode wm tac_list opts
