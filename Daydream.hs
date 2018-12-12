@@ -17,17 +17,20 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Writer.Lazy
 import Control.Monad(when)
+import Data.Map.Internal.Debug (showTree)
 
 import Lexer
 import Parser
 import SymTable
 import TAC
+import TargetCode
 
 data Flag =
     Lexer        |
     Parser       |
     Table        |
     Intermediate |
+    Target       | 
     Help
     deriving (Eq,Ord,Enum,Show,Bounded)
 
@@ -36,7 +39,8 @@ flags =
     ,Option ['p'] ["parser"]       (NoArg Parser)       "Runs the syntax analyzer and prints the syntax tree."
     ,Option ['t'] ["table"]        (NoArg Table)        "Runs the syntax analyzer and prints the symtable."
     ,Option ['h'] ["help"]         (NoArg Help)         "Prints this help message."
-    ,Option ['i'] ["intermediate"] (NoArg Intermediate) "Prints three address code"
+    ,Option ['i'] ["intermediate"] (NoArg Intermediate) "Prints three address code."
+    ,Option ['f'] ["target"]       (NoArg Target)       "Prints target code."
     ]
 
 -- |Parses the command line options.
@@ -74,7 +78,7 @@ filePath (x:_) = case reverse x of
         exitWith (ExitFailure 1)
 
 -- | Prints a token list.
-printTokList :: [Token] -> IO()
+printTokList :: [Token] -> IO ()
 printTokList = mapM_ print
 
 -- | Depending on options, prints token list and lexical errors.
@@ -111,16 +115,25 @@ syntaxErrors es = case length es of
         exitWith (ExitFailure 1)
 
 -- | Depending on options, may print the symbol table.
-printSym :: SymTable -> [Flag] -> IO()
+printSym :: SymTable -> [Flag] -> IO ()
 printSym s opts = when (Table `elem` opts) $ print s
 
 -- | Generates TAC for the syntax tree.
-generateTAC :: (TAC_convertible a) => a -> SymTable -> [Flag] -> IO ()
-generateTAC tree symtable opts = when (Intermediate `elem` opts) $ printTAC getTAC
-  where
-    getTAC = evalState (toTAC symtable tree) (0,-1,"","","")
+generateTAC :: (TACConvertible a) => a -> SymTable -> [Flag] -> [TAC]
+generateTAC tree symtable opts = evalState (toTAC symtable tree) (0,-1,"","","")
 
-main :: IO()
+printTAC' :: [TAC] -> [Flag] -> IO ()
+printTAC' tac_list opts = when (Intermediate `elem` opts) $ printTAC tac_list
+
+
+-- | Generates Target code for the Three Adress Code.
+generateTargetCode :: [TAC] -> [Flag] -> IO ()
+generateTargetCode tac_list opts = when (Target `elem` opts) ptc
+  where
+    ptc = (print . genTargetCode . filterTACList . reverse) tac_list
+
+
+main :: IO ()
 main = do
     (opts,file) <- getArgs >>= parse
     handle <- openFile file ReadMode  
@@ -133,4 +146,7 @@ main = do
     syntaxErrors w
     t <- reportRes p opts
     printSym s opts
-    generateTAC t s opts
+    let tac_list = generateTAC t s opts
+        in do 
+            printTAC' tac_list opts
+            generateTargetCode tac_list opts

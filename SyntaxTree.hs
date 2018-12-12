@@ -130,7 +130,7 @@ typeString (Pointer _ _) = "_pointer"
 data Identifier
     -- | Variable name, scope and position.
     = Variable Type (String,Integer,AlexPosn)
-    -- | Index operation over an identifier.
+    -- | Index operation over an identifier.  
     | Index Type Identifier Exp
     -- | Member call over an identifier.
     | MemberCall Type Identifier [Token]
